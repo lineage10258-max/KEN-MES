@@ -1,20 +1,26 @@
 
-import React, { useState, useMemo } from 'react';
-import { WorkOrder, MachineModel } from '../types';
-import { Filter, Search, Calendar, AlertTriangle, AlertOctagon } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { WorkOrder, MachineModel, AnomalyRecord } from '../types';
+import { Filter, Search, Calendar, AlertTriangle, AlertOctagon, Edit, Trash2, X, Save, CheckCircle } from 'lucide-react';
 
 interface AnomalyListProps {
   orders: WorkOrder[];
   models: MachineModel[];
+  onUpdateAnomaly: (anomaly: AnomalyRecord, orderId: string) => void;
+  onDeleteAnomaly: (anomalyId: string, orderId: string) => void;
 }
 
-export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models }) => {
+export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpdateAnomaly, onDeleteAnomaly }) => {
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedWorkshop, setSelectedWorkshop] = useState<string>('ALL');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Edit State
+  const [editingAnomaly, setEditingAnomaly] = useState<AnomalyRecord & { orderId: string } | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // 1. Flatten all anomalies from all orders
   const allAnomalies = useMemo(() => {
@@ -74,8 +80,189 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models }) => {
   // Statistics
   const totalDuration = filteredAnomalies.reduce((sum, a) => sum + parseFloat(a.durationDays || '0'), 0);
 
+  // Edit Logic
+  const handleEditClick = (item: any) => {
+      setEditingAnomaly({
+          ...item,
+          // Ensure dates are formatted for input[type="datetime-local"]
+          startTime: item.startTime.substring(0, 16),
+          endTime: item.endTime ? item.endTime.substring(0, 16) : ''
+      });
+      setShowEditModal(true);
+  };
+
+  const handleEditChange = (field: keyof AnomalyRecord, value: string) => {
+      if (editingAnomaly) {
+          setEditingAnomaly({ ...editingAnomaly, [field]: value });
+      }
+  };
+
+  // Re-calculate duration when dates change in edit modal (Copied logic for consistency)
+  useEffect(() => {
+      if (editingAnomaly && showEditModal) {
+          if (editingAnomaly.startTime && editingAnomaly.endTime) {
+              const start = new Date(editingAnomaly.startTime);
+              const end = new Date(editingAnomaly.endTime);
+
+              if (start >= end) {
+                  setEditingAnomaly(prev => prev ? ({ ...prev, durationDays: '0' }) : null);
+                  return;
+              }
+
+              const WORK_START_HOUR = 8;
+              const WORK_START_MIN = 30;
+              const WORK_END_HOUR = 17;
+              const WORK_END_MIN = 30;
+              const HOURS_PER_DAY = 9;
+
+              let totalMilliseconds = 0;
+              const current = new Date(start);
+              current.setHours(0,0,0,0);
+              const endDateMidnight = new Date(end);
+              endDateMidnight.setHours(0,0,0,0);
+
+              while (current <= endDateMidnight) {
+                  const shiftStart = new Date(current);
+                  shiftStart.setHours(WORK_START_HOUR, WORK_START_MIN, 0, 0);
+                  const shiftEnd = new Date(current);
+                  shiftEnd.setHours(WORK_END_HOUR, WORK_END_MIN, 0, 0);
+                  const overlapStart = start > shiftStart ? start : shiftStart;
+                  const overlapEnd = end < shiftEnd ? end : shiftEnd;
+                  if (overlapStart < overlapEnd) {
+                      totalMilliseconds += overlapEnd.getTime() - overlapStart.getTime();
+                  }
+                  current.setDate(current.getDate() + 1);
+              }
+
+              const totalHours = totalMilliseconds / (1000 * 60 * 60);
+              const totalDays = totalHours / HOURS_PER_DAY;
+              const formattedDays = parseFloat(totalDays.toFixed(1)).toString();
+              
+              setEditingAnomaly(prev => prev ? ({ ...prev, durationDays: formattedDays }) : null);
+          } else {
+               setEditingAnomaly(prev => prev ? ({ ...prev, durationDays: '0' }) : null);
+          }
+      }
+  }, [editingAnomaly?.startTime, editingAnomaly?.endTime]);
+
+  const handleSaveEdit = () => {
+      if (editingAnomaly) {
+          // Construct sanitized record for API
+          const recordToUpdate: AnomalyRecord = {
+              id: editingAnomaly.id,
+              stepName: editingAnomaly.stepName,
+              reason: editingAnomaly.reason,
+              department: editingAnomaly.department,
+              startTime: new Date(editingAnomaly.startTime).toISOString(),
+              endTime: editingAnomaly.endTime ? new Date(editingAnomaly.endTime).toISOString() : '',
+              durationDays: editingAnomaly.durationDays,
+              reportedAt: editingAnomaly.reportedAt
+          };
+          onUpdateAnomaly(recordToUpdate, editingAnomaly.orderId);
+          setShowEditModal(false);
+          setEditingAnomaly(null);
+      }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in relative">
+       
+       {/* Edit Modal */}
+       {showEditModal && editingAnomaly && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                <div className="bg-cyber-card border border-cyber-orange shadow-neon-orange max-w-lg w-full relative">
+                    <div className="bg-cyber-orange/10 p-4 border-b border-cyber-orange/30 flex justify-between items-center">
+                        <h3 className="text-xl font-bold text-white tracking-wider flex items-center gap-2">
+                            <Edit size={20} className="text-cyber-orange"/> 
+                            编辑异常记录
+                        </h3>
+                        <button onClick={() => setShowEditModal(false)} className="text-cyber-muted hover:text-white transition-colors">
+                            <X size={24} />
+                        </button>
+                    </div>
+                    
+                    <div className="p-6 space-y-4">
+                        <div className="bg-cyber-bg/30 p-2 border border-cyber-muted/10 text-xs text-cyber-muted font-mono mb-4">
+                            ID: {editingAnomaly.id} | 机台: {editingAnomaly.orderId}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">工序名称</label>
+                            <input 
+                                type="text"
+                                value={editingAnomaly.stepName}
+                                onChange={(e) => handleEditChange('stepName', e.target.value)}
+                                className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">异常原因</label>
+                            <textarea 
+                                value={editingAnomaly.reason}
+                                onChange={(e) => handleEditChange('reason', e.target.value)}
+                                rows={3}
+                                className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">责任单位</label>
+                            <select 
+                                value={editingAnomaly.department}
+                                onChange={(e) => handleEditChange('department', e.target.value)}
+                                className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
+                            >
+                                <option value="生产">生产</option>
+                                <option value="电控">电控</option>
+                                <option value="KA">KA</option>
+                                <option value="应用">应用</option>
+                                <option value="采购">采购</option>
+                                <option value="生管">生管</option>
+                                <option value="仓库">仓库</option>
+                                <option value="设计">设计</option>
+                                <option value="业务">业务</option>
+                                <option value="其他">其他</option>
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">开始时间</label>
+                                <input 
+                                    type="datetime-local"
+                                    value={editingAnomaly.startTime}
+                                    onChange={(e) => handleEditChange('startTime', e.target.value)}
+                                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">结束时间</label>
+                                <input 
+                                    type="datetime-local"
+                                    value={editingAnomaly.endTime}
+                                    onChange={(e) => handleEditChange('endTime', e.target.value)}
+                                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
+                                />
+                            </div>
+                        </div>
+
+                         <div className="bg-cyber-bg/50 p-3 border border-cyber-muted/20 flex justify-between items-center">
+                            <span className="text-xs text-cyber-muted uppercase">影响天数 (自动计算)</span>
+                            <span className="text-lg font-bold text-cyber-orange">{editingAnomaly.durationDays} 天</span>
+                        </div>
+
+                        <button 
+                            onClick={handleSaveEdit}
+                            className="w-full bg-cyber-orange hover:bg-white text-black font-bold py-3 px-4 shadow-neon-orange transition-all flex items-center justify-center gap-2 mt-4"
+                        >
+                            <Save size={18} /> 保存更改
+                        </button>
+                    </div>
+                </div>
+           </div>
+       )}
+
        {/* Header Section */}
        <div className="flex items-center gap-4 border-b border-cyber-blue/30 pb-6">
             <div className="p-4 bg-cyber-orange/10 rounded-full border border-cyber-orange/30 shadow-neon-orange">
@@ -186,12 +373,13 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models }) => {
                             <th className="p-4">异常原因描述</th>
                             <th className="p-4 w-[100px]">责任单位</th>
                             <th className="p-4 w-[100px] text-right">影响天数</th>
+                            <th className="p-4 w-[100px] text-right">操作</th>
                         </tr>
                     </thead>
                     <tbody className="text-sm divide-y divide-cyber-muted/10">
                         {filteredAnomalies.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="p-8 text-center text-cyber-muted">
+                                <td colSpan={8} className="p-8 text-center text-cyber-muted">
                                     <div className="flex flex-col items-center justify-center opacity-50">
                                         <AlertTriangle size={48} className="mb-2"/>
                                         <span>暂无符合筛选条件的异常记录</span>
@@ -226,6 +414,24 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models }) => {
                                         <span className={`font-bold ${parseFloat(item.durationDays) >= 1 ? 'text-red-500' : 'text-cyber-orange'}`}>
                                             {item.durationDays}
                                         </span>
+                                    </td>
+                                    <td className="p-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button 
+                                                onClick={() => handleEditClick(item)}
+                                                className="p-1 text-cyber-blue hover:bg-cyber-blue/20 rounded transition-colors"
+                                                title="编辑"
+                                            >
+                                                <Edit size={16} />
+                                            </button>
+                                            <button 
+                                                onClick={() => onDeleteAnomaly(item.id, item.orderId)}
+                                                className="p-1 text-cyber-muted hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                                                title="删除"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))

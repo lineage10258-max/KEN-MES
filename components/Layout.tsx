@@ -36,10 +36,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
 
   // Helper to check permission
   const hasPermission = (view: View) => {
-      // Hotfix: Force Report Download visibility for Admin/Manager even if local storage session is stale
-      if (view === 'REPORT_DOWNLOAD' && (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.MANAGER)) {
-          return true;
-      }
+      // FIXED: Strictly check allowedViews, removed hotfix override for REPORT_DOWNLOAD
       return currentUser.allowedViews?.includes(view);
   };
 
@@ -109,6 +106,15 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
             />
           )}
           
+          <div className="my-4 border-t border-cyber-muted/10 mx-4"></div>
+          
+          {/* Databases - Only show section label if not collapsed and at least one permission exists */}
+          {!isCollapsed && (hasPermission('ORDER_DB') || hasPermission('MODEL_DB') || hasPermission('HOLIDAY_DB') || hasPermission('USER_DB')) && (
+              <div className="px-6 py-2 text-xs font-mono text-cyber-muted uppercase tracking-wider">
+                  数据库管理
+              </div>
+          )}
+
           {hasPermission('ORDER_DB') && (
              <NavItem 
               icon={<Server size={20} />} 

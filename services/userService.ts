@@ -1,6 +1,4 @@
 
-
-
 import { supabase } from '../supabaseClient';
 import { AppUser, UserRole, View } from "../types";
 
@@ -20,7 +18,7 @@ const getDefaultViews = (role: UserRole): View[] => {
 
 // Helper: Map Database (snake_case) -> Frontend (camelCase)
 const mapFromDb = (row: any): AppUser => ({
-    id: row.id,
+    id: String(row.id), // Force String to ensure strict equality works in UI filters
     username: row.username,
     name: row.name,
     role: row.role as UserRole,
@@ -176,11 +174,18 @@ export const userService = {
 
     // 5. Delete User
     delete: async (id: string): Promise<void> => {
-        const { error } = await supabase
+        // Request 'exact' count to verify deletion actually happened (catches RLS silent failures)
+        const { error, count } = await supabase
             .from('app_users')
-            .delete()
+            .delete({ count: 'exact' }) 
             .eq('id', id);
         
         if (error) throwError('DeleteUser', error);
+
+        // If count is 0, it means no rows were deleted. 
+        // This usually happens if the ID doesn't exist OR RLS policy blocked the delete silently.
+        if (count === null || count === 0) {
+            throw new Error("删除失败：数据库未受影响。请检查用户是否存在，或是否具有刪除權限 (RLS Policy)。");
+        }
     }
 };

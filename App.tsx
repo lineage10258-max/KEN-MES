@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from "./supabaseClient"; 
 import { Layout } from './components/Layout';
@@ -44,13 +42,7 @@ function App() {
     const storedUser = localStorage.getItem('ken_mes_current_user');
     if (storedUser) {
       const user = JSON.parse(storedUser);
-      // Hotfix: Ensure REPORT_DOWNLOAD is available for existing sessions (ADMIN/MANAGER)
-      // This prevents users from "not seeing" the new feature if they didn't logout/login
-      if ((user.role === UserRole.ADMIN || user.role === UserRole.MANAGER) && 
-          user.allowedViews && !user.allowedViews.includes('REPORT_DOWNLOAD')) {
-          user.allowedViews.push('REPORT_DOWNLOAD');
-          localStorage.setItem('ken_mes_current_user', JSON.stringify(user));
-      }
+      // Strictly use the stored permissions without auto-adding REPORT_DOWNLOAD overrides
       setCurrentUser(user);
     }
   }, []);
@@ -196,6 +188,54 @@ function App() {
       }
   };
 
+  const handleUpdateAnomaly = async (updatedAnomaly: AnomalyRecord, orderId: string) => {
+      // Optimistically update
+      setOrders(prev => prev.map(order => {
+          if (order.id === orderId && order.anomalies) {
+              return {
+                  ...order,
+                  anomalies: order.anomalies.map(a => a.id === updatedAnomaly.id ? updatedAnomaly : a)
+              };
+          }
+          return order;
+      }));
+
+      try {
+          await orderApi.updateAnomaly(updatedAnomaly);
+          setLastSync(new Date());
+          setLastSaveTime(new Date());
+      } catch (e: any) {
+          console.error("Update anomaly failed", e);
+          alert(`更新异常失败: ${e.message}`);
+          // Should potentially rollback here by refetching
+      }
+  };
+
+  const handleDeleteAnomaly = async (anomalyId: string, orderId: string) => {
+      if(!confirm("确定要删除这条异常记录吗？")) return;
+
+      // Optimistically delete
+      setOrders(prev => prev.map(order => {
+          if (order.id === orderId && order.anomalies) {
+              return {
+                  ...order,
+                  anomalies: order.anomalies.filter(a => a.id !== anomalyId)
+              };
+          }
+          return order;
+      }));
+
+      try {
+          await orderApi.deleteAnomaly(anomalyId);
+          setLastSync(new Date());
+          setLastSaveTime(new Date());
+      } catch (e: any) {
+          console.error("Delete anomaly failed", e);
+          alert(`删除异常失败: ${e.message}`);
+          // Should potentially rollback
+      }
+  };
+
   const handleAddOrder = async (newOrder: WorkOrder) => {
     setOrders(prev => [newOrder, ...prev]); 
     try {
@@ -324,8 +364,8 @@ function App() {
     }
 
     // Role/Permission Protection Logic
-    // Hotfix: Force check for Report View specifically in case state hasn't updated in render cycle yet
-    if (!canAccess(currentView) && currentView !== 'REPORT_DOWNLOAD') {
+    // FIXED: Strictly respect canAccess without exceptions
+    if (!canAccess(currentView)) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-center">
                  <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/30">
@@ -357,7 +397,14 @@ function App() {
           />
         );
       case 'ANOMALY_LIST':
-        return <AnomalyList orders={orders} models={models} />;
+        return (
+          <AnomalyList 
+            orders={orders} 
+            models={models} 
+            onUpdateAnomaly={handleUpdateAnomaly}
+            onDeleteAnomaly={handleDeleteAnomaly}
+          />
+        );
       case 'REPORT_DOWNLOAD':
         return <ReportDownload orders={orders} models={models} />;
       case 'ORDER_DB':

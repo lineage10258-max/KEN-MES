@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect } from 'react';
 import { AppUser, UserRole, View } from '../types';
 import { userService } from '../services/userService';
@@ -16,7 +14,8 @@ export const UserDatabase: React.FC = () => {
     // Form State
     const [editId, setEditId] = useState<string | null>(null);
     const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
+    const [password, setPassword] = useState(''); // Holds current/old password
+    const [newPassword, setNewPassword] = useState(''); // Holds new password input
     const [name, setName] = useState('');
     const [role, setRole] = useState<UserRole>(UserRole.OPERATOR);
     const [department, setDepartment] = useState('');
@@ -43,6 +42,7 @@ export const UserDatabase: React.FC = () => {
         setEditId(null);
         setUsername('');
         setPassword('');
+        setNewPassword(''); // Reset new password
         setName('');
         setRole(UserRole.OPERATOR);
         setDepartment('');
@@ -53,6 +53,7 @@ export const UserDatabase: React.FC = () => {
         setEditId(user.id);
         setUsername(user.username);
         setPassword(user.password || '');
+        setNewPassword(''); // Reset new password on edit start
         setName(user.name);
         setRole(user.role);
         setDepartment(user.department || '');
@@ -68,6 +69,14 @@ export const UserDatabase: React.FC = () => {
             return;
         }
 
+        // Determine which password to use: New input if exists, otherwise keep old
+        const finalPassword = newPassword.trim() !== '' ? newPassword : password;
+
+        if (!editId && !finalPassword) {
+             alert('新建用户必须设置密码');
+             return;
+        }
+
         setIsSaving(true);
         try {
             if (editId) {
@@ -75,7 +84,7 @@ export const UserDatabase: React.FC = () => {
                 const updated = await userService.update({
                     id: editId,
                     username,
-                    password,
+                    password: finalPassword,
                     name,
                     role,
                     department,
@@ -87,7 +96,7 @@ export const UserDatabase: React.FC = () => {
                 const created = await userService.create({
                     id: '', // Service handles ID
                     username,
-                    password,
+                    password: finalPassword,
                     name,
                     role,
                     department,
@@ -112,17 +121,26 @@ export const UserDatabase: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!id) return;
+        // Ensure ID is valid string
+        if (!id) {
+            alert("错误：无法删除 ID 为空的记录");
+            return;
+        }
+        
         if (!confirm('确定删除此用户吗？此操作不可恢复。')) return;
 
         setDeletingId(id); // Start Loading
         try {
             await userService.delete(id);
+            // Update UI
             setUsers(prev => prev.filter(u => u.id !== id));
         } catch (e: any) {
             console.error("Delete error:", e);
             const msg = e instanceof Error ? e.message : String(e);
-            alert(`删除失败: ${msg}`);
+            alert(`删除失败: ${msg}\n\n可能原因: 权限不足 (RLS) 或資料庫連線異常。`);
+            
+            // If failed, reload list to ensure UI matches DB state
+            loadUsers();
         } finally {
             setDeletingId(null); // End Loading
         }
@@ -274,15 +292,33 @@ export const UserDatabase: React.FC = () => {
                                 className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"
                             />
                         </div>
+
+                        {/* Password Section */}
+                        {editId && (
+                            <div>
+                                <label className="block text-xs font-mono text-cyber-blue mb-2">当前密码 (只读)</label>
+                                <input 
+                                    type="password" 
+                                    value={password}
+                                    readOnly
+                                    disabled
+                                    className="w-full bg-cyber-bg/50 border border-cyber-muted/20 p-2 text-cyber-muted font-mono text-sm cursor-not-allowed"
+                                />
+                            </div>
+                        )}
                         <div>
-                            <label className="block text-xs font-mono text-cyber-blue mb-2">密码</label>
+                            <label className="block text-xs font-mono text-cyber-orange mb-2">
+                                {editId ? '新密码 (若不修改请留空)' : '设置密码'}
+                            </label>
                             <input 
                                 type="text" 
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                placeholder="输入新密码..."
+                                className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none font-mono text-sm"
                             />
                         </div>
+
                         <div>
                             <label className="block text-xs font-mono text-cyber-blue mb-2">真实姓名</label>
                             <input 

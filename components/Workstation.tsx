@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepStatusEnum, StepState, AnomalyRecord } from '../types';
 import { calculateProjectedDate } from '../services/holidayService';
-import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, CalendarDays } from 'lucide-react';
+import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, CalendarDays, RotateCcw, Search } from 'lucide-react';
 
 interface WorkstationProps {
   orders: WorkOrder[];
@@ -20,6 +20,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
   
   // Anomaly Modal State
   const [showAnomalyModal, setShowAnomalyModal] = useState(false);
+  const [stepSearchTerm, setStepSearchTerm] = useState(''); // New state for searching steps
   const [newAnomaly, setNewAnomaly] = useState<{
       stepName: string;
       reason: string;
@@ -232,6 +233,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
         endTime: getDefaultTimeStr(17, 30),
         durationDays: '0'
     });
+    setStepSearchTerm(''); // Reset search term
     setShowAnomalyModal(true);
   };
 
@@ -343,12 +345,20 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                            )}
 
                            {selectedOrder.stepStates?.[selectedStep.id]?.status === 'IN_PROGRESS' && (
-                                <button 
-                                   onClick={() => handleUpdateCurrentStepStatus('COMPLETED')}
-                                   className="flex-1 bg-green-500 hover:bg-green-400 text-black font-bold py-3 px-4 shadow-[0_0_15px_rgba(34,197,94,0.5)] transition-all flex items-center justify-center gap-2"
-                               >
-                                   <CheckCircle size={18} /> 确认完工
-                               </button>
+                                <>
+                                    <button 
+                                        onClick={() => handleUpdateCurrentStepStatus('PENDING')}
+                                        className="flex-1 bg-transparent border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black font-bold py-3 px-4 shadow-[0_0_10px_rgba(255,136,0,0.3)] transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <RotateCcw size={18} /> 退回待开工
+                                    </button>
+                                    <button 
+                                        onClick={() => handleUpdateCurrentStepStatus('COMPLETED')}
+                                        className="flex-1 bg-green-500 hover:bg-green-400 text-black font-bold py-3 px-4 shadow-[0_0_15px_rgba(34,197,94,0.5)] transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <CheckCircle size={18} /> 确认完工
+                                    </button>
+                                </>
                            )}
 
                            {selectedOrder.stepStates?.[selectedStep.id]?.status === 'COMPLETED' && (
@@ -382,13 +392,28 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                   <div className="p-6 space-y-4">
                       <div>
                           <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">关联工序名称</label>
+                          
+                          {/* Search Step Input */}
+                          <div className="relative mb-1 group">
+                             <Search className="absolute left-2 top-2.5 text-cyber-muted group-focus-within:text-cyber-orange transition-colors" size={14} />
+                             <input 
+                                 type="text"
+                                 value={stepSearchTerm}
+                                 onChange={(e) => setStepSearchTerm(e.target.value)}
+                                 placeholder="搜索工序..."
+                                 className="w-full bg-cyber-bg border border-cyber-muted/40 pl-8 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm transition-all"
+                             />
+                          </div>
+
                           <select 
                              value={newAnomaly.stepName}
                              onChange={(e) => setNewAnomaly({...newAnomaly, stepName: e.target.value})}
                              className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
                           >
                               <option value="">-- 请选择工序 --</option>
-                              {selectedModel?.steps.map(s => (
+                              {selectedModel?.steps
+                                  .filter(s => s.name.toLowerCase().includes(stepSearchTerm.toLowerCase()))
+                                  .map(s => (
                                   <option key={s.id} value={s.name}>{s.name} ({s.parallelModule})</option>
                               ))}
                               <option value="OTHER">其他/整机</option>

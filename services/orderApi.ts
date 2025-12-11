@@ -1,3 +1,4 @@
+
 import { supabase } from '../supabaseClient';
 import { WorkOrder, AnomalyRecord } from '../types';
 
@@ -145,6 +146,43 @@ export const orderApi = {
 
       if (error) {
           console.error("Failed to insert anomaly:", error);
+          throw error;
+      }
+  },
+
+  // 6. Update Anomaly
+  updateAnomaly: async (anomaly: AnomalyRecord): Promise<void> => {
+      const payload = {
+          step_name: anomaly.stepName,
+          reason: anomaly.reason,
+          department: anomaly.department,
+          start_time: anomaly.startTime,
+          end_time: anomaly.endTime || null,
+          duration_days: anomaly.durationDays
+      };
+
+      const { error } = await supabase
+          .from('order_error')
+          .update(payload)
+          .eq('id', anomaly.id); // Assuming anomaly.id matches the DB id (usually int8 or uuid)
+
+      if (error) {
+          console.error("Failed to update anomaly:", error);
+          throw error;
+      }
+  },
+
+  // 7. Delete Anomaly
+  deleteAnomaly: async (anomalyId: string): Promise<void> => {
+      // NOTE: Because local ID might be "AN-Date.now()", check if it's a temp ID or DB ID
+      // But usually we just pass the ID we have. If it's not in DB, delete won't affect rows.
+      const { error } = await supabase
+          .from('order_error')
+          .delete()
+          .eq('id', anomalyId);
+
+      if (error) {
+          console.error("Failed to delete anomaly:", error);
           throw error;
       }
   }
