@@ -1,4 +1,6 @@
 
+
+
 import { supabase } from '../supabaseClient';
 import { AppUser, UserRole, View } from "../types";
 
@@ -6,9 +8,9 @@ import { AppUser, UserRole, View } from "../types";
 const getDefaultViews = (role: UserRole): View[] => {
     switch (role) {
         case UserRole.ADMIN:
-            return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB', 'USER_DB'];
+            return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST', 'REPORT_DOWNLOAD', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB', 'USER_DB'];
         case UserRole.MANAGER:
-            return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB'];
+            return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST', 'REPORT_DOWNLOAD', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB'];
         case UserRole.OPERATOR:
             return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST'];
         default:

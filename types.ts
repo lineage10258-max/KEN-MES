@@ -18,7 +18,7 @@ export enum UserRole {
   OPERATOR = 'OPERATOR'  // 生产: Workstation execution only
 }
 
-export type View = 'DASHBOARD' | 'WORKSTATION' | 'ANOMALY_LIST' | 'ORDER_DB' | 'MODEL_DB' | 'HOLIDAY_DB' | 'USER_DB';
+export type View = 'DASHBOARD' | 'WORKSTATION' | 'ANOMALY_LIST' | 'ORDER_DB' | 'MODEL_DB' | 'HOLIDAY_DB' | 'USER_DB' | 'REPORT_DOWNLOAD';
 
 export interface AppUser {
   id: string;

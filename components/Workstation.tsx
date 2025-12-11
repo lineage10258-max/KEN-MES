@@ -577,7 +577,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                                  <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${
                                                      variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'
                                                  }`}>
-                                                     <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异天数</span>
+                                                     <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span>
                                                      <div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
                                                          {variance > 0 && <AlertTriangle size={8}/>}
                                                          {variance > 0 ? `+${variance}` : variance}
@@ -587,7 +587,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                              
                                              {/* Planned Box (Dynamic) */}
                                              <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                                                 <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">计划完工</span>
+                                                 <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">完工</span>
                                                  <span className="text-xs font-bold text-cyber-blue leading-none">
                                                      {projectedDate.getMonth() + 1}/{projectedDate.getDate()}
                                                  </span>
@@ -597,7 +597,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                              <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${
                                                  variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'
                                              }`}>
-                                                 <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">业务结关</span>
+                                                 <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">结关</span>
                                                  <span className={`text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-cyber-muted'}`}>
                                                      {closingDate ? `${closingDate.getMonth() + 1}/${closingDate.getDate()}` : '-'}
                                                  </span>

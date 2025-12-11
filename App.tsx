@@ -1,10 +1,13 @@
 
+
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from "./supabaseClient"; 
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Workstation } from './components/Workstation';
-import { AnomalyList } from './components/AnomalyList'; // Import new component
+import { AnomalyList } from './components/AnomalyList'; 
+import { ReportDownload } from './components/ReportDownload'; // Import new component
 import { ModelDatabase } from './components/ModelDatabase';
 import { OrderDatabase } from './components/OrderDatabase';
 import { HolidayDatabase } from './components/HolidayDatabase';
@@ -40,7 +43,15 @@ function App() {
   useEffect(() => {
     const storedUser = localStorage.getItem('ken_mes_current_user');
     if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser));
+      const user = JSON.parse(storedUser);
+      // Hotfix: Ensure REPORT_DOWNLOAD is available for existing sessions (ADMIN/MANAGER)
+      // This prevents users from "not seeing" the new feature if they didn't logout/login
+      if ((user.role === UserRole.ADMIN || user.role === UserRole.MANAGER) && 
+          user.allowedViews && !user.allowedViews.includes('REPORT_DOWNLOAD')) {
+          user.allowedViews.push('REPORT_DOWNLOAD');
+          localStorage.setItem('ken_mes_current_user', JSON.stringify(user));
+      }
+      setCurrentUser(user);
     }
   }, []);
 
@@ -313,7 +324,8 @@ function App() {
     }
 
     // Role/Permission Protection Logic
-    if (!canAccess(currentView)) {
+    // Hotfix: Force check for Report View specifically in case state hasn't updated in render cycle yet
+    if (!canAccess(currentView) && currentView !== 'REPORT_DOWNLOAD') {
         return (
             <div className="flex flex-col items-center justify-center h-full text-center">
                  <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/30">
@@ -346,6 +358,8 @@ function App() {
         );
       case 'ANOMALY_LIST':
         return <AnomalyList orders={orders} models={models} />;
+      case 'REPORT_DOWNLOAD':
+        return <ReportDownload orders={orders} models={models} />;
       case 'ORDER_DB':
         return (
             <OrderDatabase 

@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect } from 'react';
 import { AppUser, UserRole, View } from '../types';
 import { userService } from '../services/userService';
@@ -150,6 +152,7 @@ export const UserDatabase: React.FC = () => {
         { id: 'DASHBOARD', label: '运营总览', desc: '查看工厂KPI和生产进度' },
         { id: 'WORKSTATION', label: '工作站', desc: '执行工序、查看图纸、报工' },
         { id: 'ANOMALY_LIST', label: '异常监控', desc: '全厂异常清单与筛选' },
+        { id: 'REPORT_DOWNLOAD', label: '报表中心', desc: '导出工单、异常及日志报表' },
         { id: 'ORDER_DB', label: '机台数据库', desc: '管理机台订单、排程与投产' },
         { id: 'MODEL_DB', label: '工艺数据库', desc: '管理机型工艺蓝图与工序' },
         { id: 'HOLIDAY_DB', label: '假日数据库', desc: '设置工厂行事历与假日' },

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, AppUser, UserRole } from '../types';
-import { LayoutDashboard, Wrench, Database, Activity, Cpu, Server, CalendarClock, UserCog, LogOut, AlertOctagon } from 'lucide-react';
+import { LayoutDashboard, Wrench, Database, Activity, Cpu, Server, CalendarClock, UserCog, LogOut, AlertOctagon, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 
 interface LayoutProps {
   currentView: View;
@@ -16,6 +16,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, children, lastSync, lastSaveTime, dbStatus, currentUser, onLogout }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -35,28 +36,45 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
 
   // Helper to check permission
   const hasPermission = (view: View) => {
+      // Hotfix: Force Report Download visibility for Admin/Manager even if local storage session is stale
+      if (view === 'REPORT_DOWNLOAD' && (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.MANAGER)) {
+          return true;
+      }
       return currentUser.allowedViews?.includes(view);
   };
 
   return (
     <div className="min-h-screen flex bg-cyber-bg text-cyber-text font-sans selection:bg-cyber-blue selection:text-black">
       {/* Sidebar */}
-      <aside className="w-20 md:w-64 bg-cyber-card border-r border-cyber-blue/20 flex flex-col shadow-2xl z-20 transition-all duration-300">
-        <div className="h-24 flex items-center justify-center md:justify-start md:px-6 border-b border-cyber-blue/20">
-          <Cpu className="w-8 h-8 text-cyber-blue animate-pulse mr-0 md:mr-3 shadow-neon-blue rounded-full" />
-          <div className="hidden md:block">
-            <span className="font-display font-bold text-xl tracking-widest text-white">KEN<span className="text-cyber-blue">.MES</span></span>
-            <div className="text-[10px] text-cyber-muted font-mono tracking-wider">KM.26.V1</div>
+      <aside 
+        className={`${isCollapsed ? 'w-20' : 'w-20 md:w-64'} bg-cyber-card border-r border-cyber-blue/20 flex flex-col shadow-2xl z-20 transition-all duration-300 relative`}
+      >
+        {/* Toggle Button */}
+        <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="absolute -right-3 top-9 bg-cyber-card border border-cyber-blue text-cyber-blue rounded-full p-1 shadow-neon-blue hover:bg-cyber-blue hover:text-black transition-colors z-50 hidden md:flex"
+            title={isCollapsed ? "展开菜单" : "收起菜单"}
+        >
+            {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+
+        <div className={`h-24 flex items-center ${isCollapsed ? 'justify-center' : 'justify-center md:justify-start md:px-6'} border-b border-cyber-blue/20 transition-all duration-300 overflow-hidden`}>
+          <Cpu className="w-8 h-8 text-cyber-blue animate-pulse flex-shrink-0 shadow-neon-blue rounded-full" />
+          
+          <div className={`ml-3 transition-opacity duration-300 ${isCollapsed ? 'hidden' : 'hidden md:block'}`}>
+            <span className="font-display font-bold text-xl tracking-widest text-white whitespace-nowrap">KEN<span className="text-cyber-blue">.MES</span></span>
+            <div className="text-[10px] text-cyber-muted font-mono tracking-wider whitespace-nowrap">KM.26.V1</div>
           </div>
         </div>
 
-        <nav className="flex-1 py-6 space-y-2">
+        <nav className="flex-1 py-6 space-y-2 overflow-y-auto custom-scrollbar overflow-x-hidden">
           {hasPermission('DASHBOARD') && (
             <NavItem 
                 icon={<LayoutDashboard size={20} />} 
                 label="运营总览" 
                 isActive={currentView === 'DASHBOARD'} 
-                onClick={() => onNavigate('DASHBOARD')} 
+                onClick={() => onNavigate('DASHBOARD')}
+                isCollapsed={isCollapsed}
             />
           )}
           
@@ -66,6 +84,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 label="工作站" 
                 isActive={currentView === 'WORKSTATION'} 
                 onClick={() => onNavigate('WORKSTATION')} 
+                isCollapsed={isCollapsed}
             />
           )}
 
@@ -75,6 +94,18 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 label="异常监控" 
                 isActive={currentView === 'ANOMALY_LIST'} 
                 onClick={() => onNavigate('ANOMALY_LIST')} 
+                isCollapsed={isCollapsed}
+            />
+          )}
+
+          {hasPermission('REPORT_DOWNLOAD') && (
+            <NavItem 
+                icon={<FileText size={20} />} 
+                label="报表中心" 
+                isActive={currentView === 'REPORT_DOWNLOAD'} 
+                onClick={() => onNavigate('REPORT_DOWNLOAD')} 
+                isCollapsed={isCollapsed}
+                badge="NEW"
             />
           )}
           
@@ -84,6 +115,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
               label="机台数据库" 
               isActive={currentView === 'ORDER_DB'} 
               onClick={() => onNavigate('ORDER_DB')} 
+              isCollapsed={isCollapsed}
             />
           )}
           
@@ -93,6 +125,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
               label="工艺数据库" 
               isActive={currentView === 'MODEL_DB'} 
               onClick={() => onNavigate('MODEL_DB')} 
+              isCollapsed={isCollapsed}
             />
           )}
           
@@ -102,6 +135,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
               label="假日数据库" 
               isActive={currentView === 'HOLIDAY_DB'} 
               onClick={() => onNavigate('HOLIDAY_DB')} 
+              isCollapsed={isCollapsed}
             />
           )}
 
@@ -111,26 +145,27 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
               label="用户权限" 
               isActive={currentView === 'USER_DB'} 
               onClick={() => onNavigate('USER_DB')} 
+              isCollapsed={isCollapsed}
             />
           )}
         </nav>
 
-        <div className="p-4 border-t border-cyber-blue/20 text-xs text-cyber-muted hidden md:block font-mono">
+        <div className={`p-4 border-t border-cyber-blue/20 text-xs text-cyber-muted transition-all duration-300 overflow-hidden ${isCollapsed ? 'hidden' : 'hidden md:block'} font-mono`}>
           {/* Company Name */}
-          <p className="text-white mb-2 tracking-wider text-sm uppercase">
+          <p className="text-white mb-2 tracking-wider text-sm uppercase whitespace-nowrap">
             大前机床(江苏)有限公司
           </p>
 
           {/* Time */}
-          <p className="text-cyber-orange text-sm tracking-widest mb-2">
+          <p className="text-cyber-orange text-sm tracking-widest mb-2 whitespace-nowrap">
             {formatTime(currentTime)}
           </p>
           
           {/* System Status */}
-          <p className="mb-2">系统状态: <span className="text-green-400">在线</span></p>
+          <p className="mb-2 whitespace-nowrap">系统状态: <span className="text-green-400">在线</span></p>
 
           {/* DB Status */}
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 whitespace-nowrap">
              <span>数据库状态:</span>
              {dbStatus === 'CONNECTING' && <span className="text-yellow-400 animate-pulse">连接中...</span>}
              {dbStatus === 'CONNECTED' && <span className="text-green-400 font-bold">🟢 连接成功</span>}
@@ -138,13 +173,21 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
           </div>
           
           {/* Last Save Time Indicator */}
-          <div className="flex items-center gap-2 pt-2 border-t border-cyber-muted/10">
+          <div className="flex items-center gap-2 pt-2 border-t border-cyber-muted/10 whitespace-nowrap">
               <div className={`w-2 h-2 rounded-full ${lastSaveTime ? 'bg-green-500 shadow-[0_0_5px_#22c55e] animate-pulse' : 'bg-cyber-muted'}`}></div>
               <span className="text-[10px] opacity-70">
                   {lastSaveTime ? `已保存: ${lastSaveTime.toLocaleTimeString()}` : '等待数据...'}
               </span>
           </div>
         </div>
+        
+        {/* Collapsed Mode Footer Indicator (Dot only) */}
+        {isCollapsed && (
+            <div className="py-4 flex flex-col items-center gap-4 border-t border-cyber-blue/20">
+                <div title={`系统状态: 在线`} className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_5px_#22c55e]"></div>
+                <div title={dbStatus === 'CONNECTED' ? '数据库: 已连接' : '数据库: 异常'} className={`w-2 h-2 rounded-full ${dbStatus === 'CONNECTED' ? 'bg-green-400' : 'bg-red-500'}`}></div>
+            </div>
+        )}
       </aside>
 
       {/* Main Content */}
@@ -162,6 +205,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 {currentView === 'DASHBOARD' && <><Activity className="text-cyber-orange" /> 生产总览</>}
                 {currentView === 'WORKSTATION' && <><Wrench className="text-cyber-blue" /> 生产排程</>}
                 {currentView === 'ANOMALY_LIST' && <><AlertOctagon className="text-cyber-orange" /> 异常监控</>}
+                {currentView === 'REPORT_DOWNLOAD' && <><FileText className="text-cyber-blue" /> 报表中心</>}
                 {currentView === 'ORDER_DB' && <><Server className="text-cyber-blue" /> 机台数据库</>}
                 {currentView === 'MODEL_DB' && <><Database className="text-cyber-blue" /> 工艺数据库</>}
                 {currentView === 'HOLIDAY_DB' && <><CalendarClock className="text-cyber-blue" /> 假日数据库</>}
@@ -277,20 +321,30 @@ interface NavItemProps {
   label: string;
   isActive: boolean;
   onClick: () => void;
+  isCollapsed: boolean;
+  badge?: string;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, isActive, onClick }) => {
+const NavItem: React.FC<NavItemProps> = ({ icon, label, isActive, onClick, isCollapsed, badge }) => {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center px-4 md:px-6 py-4 transition-all duration-200 border-l-2 ${
+      title={isCollapsed ? label : ''}
+      className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'justify-center md:justify-start px-4 md:px-6'} py-4 transition-all duration-200 border-l-2 group relative ${
         isActive 
           ? 'bg-gradient-to-r from-cyber-blueDim to-transparent text-cyber-blue border-cyber-blue shadow-[inset_10px_0_20px_-10px_rgba(0,240,255,0.3)]' 
           : 'text-cyber-muted border-transparent hover:text-white hover:bg-white/5'
       }`}
     >
       <span className={`flex-shrink-0 ${isActive ? 'animate-pulse' : ''}`}>{icon}</span>
-      <span className="ml-3 font-mono font-medium tracking-wider hidden md:block">{label}</span>
+      <span className={`ml-3 font-mono font-medium tracking-wider transition-all duration-300 overflow-hidden whitespace-nowrap ${isCollapsed ? 'w-0 opacity-0 hidden' : 'hidden md:block w-auto opacity-100'}`}>
+          {label}
+      </span>
+      {badge && !isCollapsed && (
+          <span className="ml-2 px-1.5 py-0.5 bg-cyber-blue text-black text-[9px] font-bold rounded animate-pulse shadow-neon-blue">
+              {badge}
+          </span>
+      )}
     </button>
   );
 };
