@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { WorkOrder, MachineModel, MachineStatus, ProcessStep } from '../types';
-import { FileDown, Table, AlertTriangle, FileClock, Download, CalendarDays, Factory } from 'lucide-react';
+import { FileDown, Table, AlertTriangle, FileClock, Download, CalendarDays, Factory, X, Play, Image as ImageIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
 import { calculateProjectedDate } from '../services/holidayService';
 
 interface ReportDownloadProps {
@@ -11,12 +12,32 @@ interface ReportDownloadProps {
 }
 
 export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }) => {
+  const [dailyScheduleWorkshop, setDailyScheduleWorkshop] = useState<string | null>(null);
+  const modalContentRef = useRef<HTMLDivElement>(null); // Ref for the modal content to capture
 
-  // Helper to format date
+  // Helper to format date safely (avoid timezone shifts)
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
-    const d = new Date(dateString);
-    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+    // Use string manipulation for ISO dates to ensure YYYY-MM-DD matches DB exactly
+    return dateString.split('T')[0];
+  };
+
+  // Helper for Header Date Display
+  const getHeaderDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const weekMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const w = weekMap[now.getDay()];
+    
+    // Time formatting
+    const hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const formattedHours = hours % 12 || 12; // Convert 0 to 12
+
+    return `${y}/${m}/${d} (${w}) ${formattedHours}:${minutes} ${ampm}`;
   };
 
   // Helper: Calculate Variance Days (Copied logic for report consistency)
@@ -55,6 +76,81 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
 
       return { variance, projectedDate: projected };
   };
+
+   // Helper to generate data for the Daily Schedule Modal
+  const getDailyScheduleData = () => {
+      if (!dailyScheduleWorkshop) return [];
+
+      const targetOrders = orders.filter(o => 
+          o.status === MachineStatus.IN_PROGRESS && 
+          o.workshop?.startsWith(dailyScheduleWorkshop)
+      );
+
+      const todayStr = new Date().toDateString();
+
+      return targetOrders.map(o => {
+          const model = models.find(m => m.id === o.modelId);
+          if (!model) return null;
+
+          // Reuse calculateVariance logic
+          const { variance, projectedDate } = calculateVariance(o, model);
+          const progress = Math.round((o.currentStepIndex / model.steps.length) * 100);
+
+          // Traffic Light Status
+          const hasProgressToday = o.logs?.some(log => new Date(log.completedAt).toDateString() === todayStr);
+          const dailyStatus = hasProgressToday ? 'GREEN' : 'YELLOW';
+
+          // Parallel Modules Logic
+          const moduleGroups: Record<string, ProcessStep[]> = {};
+          model.steps.forEach(s => {
+              const mod = s.parallelModule || '通用';
+              if (!moduleGroups[mod]) moduleGroups[mod] = [];
+              moduleGroups[mod].push(s);
+          });
+
+          const activeModuleDetails: string[] = [];
+          
+          Object.entries(moduleGroups).forEach(([modName, steps]) => {
+              // Hide if fully complete
+              const isModuleComplete = steps.every(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
+              if (isModuleComplete) return;
+
+              // Find logic
+              let targetStep = steps.find(s => o.stepStates?.[s.id]?.status === 'IN_PROGRESS');
+              let statusSuffix = '(进行中)';
+
+              if (!targetStep) {
+                  const completedSteps = steps.filter(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
+                  if (completedSteps.length > 0) {
+                      targetStep = completedSteps[completedSteps.length - 1];
+                      statusSuffix = '(近期完工)';
+                  } else {
+                      targetStep = steps[0];
+                      statusSuffix = '(待开工)';
+                  }
+              }
+
+              if (targetStep) {
+                  activeModuleDetails.push(`【${modName}】${targetStep.module}: ${targetStep.name} ${statusSuffix}`);
+              }
+          });
+
+          return {
+              id: o.id,
+              clientName: o.clientName,
+              progress,
+              variance,
+              startDate: o.startDate,
+              projectedDate,
+              closingDate: o.businessClosingDate,
+              materialRate: "60%",
+              dailyStatus,
+              details: activeModuleDetails
+          };
+      }).filter(Boolean) as any[]; // Cast to avoid TS null issues
+  };
+
+  const dailyScheduleData = useMemo(() => getDailyScheduleData(), [dailyScheduleWorkshop, orders, models]);
 
   // 1. Export All Production Orders
   const handleExportOrders = () => {
@@ -137,9 +233,8 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       XLSX.writeFile(wb, `生产日志报表_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // 4. Export Daily Schedule (Generic for K1, K2, K3)
+  // 4. Export Daily Schedule Logic (Reusable for the modal button)
   const handleExportDailySchedule = (workshopPrefix: string) => {
-      // Filter: Specific Workshop AND In Progress
       const targetOrders = orders.filter(o => 
           o.status === MachineStatus.IN_PROGRESS && 
           o.workshop?.startsWith(workshopPrefix)
@@ -156,16 +251,11 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
           const model = models.find(m => m.id === o.modelId);
           if (!model) return null;
 
-          // A. Calculate Metrics
           const { variance, projectedDate } = calculateVariance(o, model);
           const progress = Math.round((o.currentStepIndex / model.steps.length) * 100);
-
-          // B. Determine Daily Status (Traffic Light)
-          // Check if any log entry exists for TODAY
           const hasProgressToday = o.logs?.some(log => new Date(log.completedAt).toDateString() === todayStr);
-          const dailyStatus = hasProgressToday ? '🟢 今日有产出' : '🟡 今日无完工';
+          const dailyStatus = hasProgressToday ? '🟢 正常 (今日有产出)' : '🟡 滞后 (今日无产出)';
 
-          // C. Analyze Parallel Modules
           const moduleGroups: Record<string, ProcessStep[]> = {};
           model.steps.forEach(s => {
               const mod = s.parallelModule || '通用';
@@ -173,39 +263,33 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
               moduleGroups[mod].push(s);
           });
 
-          // Build detail string for active modules
           const activeModuleDetails: string[] = [];
           
           Object.entries(moduleGroups).forEach(([modName, steps]) => {
-              // Rule: If module is fully completed, do not show
               const isModuleComplete = steps.every(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
-              
-              if (!isModuleComplete) {
-                  // Rule: Find Active Step (IN_PROGRESS)
-                  let targetStep = steps.find(s => o.stepStates?.[s.id]?.status === 'IN_PROGRESS');
-                  let statusSuffix = '(进行中)';
+              if (isModuleComplete) return;
 
-                  // Rule: If none IN_PROGRESS, use Recently Completed
-                  if (!targetStep) {
-                      const completedSteps = steps.filter(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
-                      if (completedSteps.length > 0) {
-                          targetStep = completedSteps[completedSteps.length - 1];
-                          statusSuffix = '(刚完工)';
-                      } else {
-                          // Fallback: Pending Start
-                          targetStep = steps[0];
-                          statusSuffix = '(待开工)';
-                      }
-                  }
+              let targetStep = steps.find(s => o.stepStates?.[s.id]?.status === 'IN_PROGRESS');
+              let statusSuffix = ' (进行中)';
 
-                  if (targetStep) {
-                      // Format: [Module] SubModule: Name
-                      activeModuleDetails.push(`[${modName}] ${targetStep.module}: ${targetStep.name} ${statusSuffix}`);
+              if (!targetStep) {
+                  const completedSteps = steps.filter(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
+                  if (completedSteps.length > 0) {
+                      targetStep = completedSteps[completedSteps.length - 1];
+                      statusSuffix = ' (近期完工)';
+                  } else {
+                      targetStep = steps[0];
+                      statusSuffix = ' (待开工)';
                   }
+              }
+
+              if (targetStep) {
+                  activeModuleDetails.push(`【${modName}】${targetStep.module}: ${targetStep.name}${statusSuffix}`);
               }
           });
 
           return {
+              "客户": o.clientName || '',
               "机台号": o.id,
               "进度": `${progress}%`,
               "差异天数": variance > 0 ? `+${variance}` : variance,
@@ -219,18 +303,8 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       }).filter(Boolean);
 
       const ws = XLSX.utils.json_to_sheet(data);
-      
-      // Auto-width for columns
       ws['!cols'] = [
-          { wch: 15 }, // ID
-          { wch: 8 },  // Progress
-          { wch: 10 }, // Variance
-          { wch: 12 }, // Start
-          { wch: 12 }, // End
-          { wch: 12 }, // Closing
-          { wch: 8 },  // Material
-          { wch: 15 }, // Status
-          { wch: 60 }, // Details (Wide)
+          { wch: 10 }, { wch: 18 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 60 },
       ];
 
       const wb = XLSX.utils.book_new();
@@ -238,120 +312,297 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       XLSX.writeFile(wb, `${workshopPrefix}车间日排程_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // 5. Export Image (JPG) Logic
+  const handleExportImage = async () => {
+    if (!modalContentRef.current) return;
+    
+    // Create clone to capture full height content
+    const element = modalContentRef.current;
+    const clone = element.cloneNode(true) as HTMLElement;
+    
+    // Setup clone styles to expand full height
+    clone.style.position = 'fixed'; 
+    clone.style.top = '-10000px';
+    clone.style.left = '-10000px';
+    clone.style.width = `${element.offsetWidth}px`;
+    clone.style.height = 'auto';
+    clone.style.maxHeight = 'none';
+    clone.style.overflow = 'visible';
+    clone.style.zIndex = '-1000';
+    
+    // Expand the scrollable content container
+    const scrollableContainer = clone.querySelector('.overflow-y-auto') as HTMLElement;
+    if (scrollableContainer) {
+        scrollableContainer.style.overflow = 'visible';
+        scrollableContainer.style.height = 'auto';
+        scrollableContainer.style.maxHeight = 'none';
+    }
+    
+    // Fix sticky header for screenshot (make it static so it sits at top)
+    const stickyHeader = clone.querySelector('thead.sticky') as HTMLElement;
+    if (stickyHeader) {
+        stickyHeader.style.position = 'static';
+    }
+
+    document.body.appendChild(clone);
+    
+    try {
+        // Short delay to ensure rendering
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const canvas = await html2canvas(clone, {
+            backgroundColor: '#0f172a', // force background color to match cyber-card
+            scale: 2, // higher resolution
+            logging: false,
+            useCORS: true,
+            ignoreElements: (element) => {
+                // Ignore the button group during capture so it looks like a report
+                return element.classList.contains('no-print');
+            },
+            windowHeight: clone.scrollHeight,
+            height: clone.scrollHeight
+        });
+        
+        const image = canvas.toDataURL("image/jpeg", 0.9);
+        const link = document.createElement("a");
+        link.download = `${dailyScheduleWorkshop || 'Schedule'}_日报表_${new Date().toISOString().split('T')[0]}.jpg`;
+        link.href = image;
+        link.click();
+    } catch (err) {
+        console.error("Image Export Failed:", err);
+        alert("图片导出失败，请重试");
+    } finally {
+        if (document.body.contains(clone)) {
+            document.body.removeChild(clone);
+        }
+    }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto animate-fade-in">
-        <div className="flex items-center gap-4 border-b border-cyber-blue/30 pb-6 mb-8">
-            <div className="p-4 bg-cyber-blue/10 rounded-full border border-cyber-blue/30 shadow-neon-blue">
-                <FileDown size={32} className="text-cyber-blue" />
+    <>
+        {/* Full Screen Modal for Daily Schedule View */}
+        {dailyScheduleWorkshop && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fade-in">
+              <div ref={modalContentRef} className="bg-cyber-card border border-cyber-blue shadow-neon-blue w-full max-w-6xl h-[80vh] flex flex-col relative mx-auto">
+                  {/* Modal Header */}
+                  <div className="bg-cyber-blue/10 p-4 border-b border-cyber-blue/30 flex justify-between items-center">
+                      <div className="flex items-center gap-4">
+                           <Factory size={28} className="text-cyber-orange" />
+                           <div>
+                               <h2 className="text-xl font-display font-bold text-white tracking-widest">{dailyScheduleWorkshop} 车间日排程动态</h2>
+                               <p className="text-xs text-white/90 font-mono opacity-90">{getHeaderDate()}</p>
+                           </div>
+                      </div>
+                      
+                      {/* Button Group (Ignored in Screenshot) */}
+                      <div className="flex gap-4 items-center no-print">
+                          <button 
+                             onClick={handleExportImage}
+                             className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500 text-indigo-400 hover:bg-indigo-500 hover:text-black px-4 py-1.5 rounded text-xs font-bold transition-all shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+                          >
+                             <ImageIcon size={16} /> 导出图片
+                          </button>
+                          <button 
+                             onClick={() => handleExportDailySchedule(dailyScheduleWorkshop)}
+                             className="flex items-center gap-2 bg-green-500/10 border border-green-500 text-green-400 hover:bg-green-500 hover:text-black px-4 py-1.5 rounded text-xs font-bold transition-all shadow-[0_0_10px_rgba(34,197,94,0.3)]"
+                          >
+                             <Download size={16} /> 导出 Excel
+                          </button>
+                          <button onClick={() => setDailyScheduleWorkshop(null)} className="text-cyber-muted hover:text-white transition-colors bg-cyber-bg p-1 rounded-full border border-cyber-muted/30">
+                              <X size={24} />
+                          </button>
+                      </div>
+                  </div>
+
+                  {/* Modal Content - Table */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                       {dailyScheduleData.length === 0 ? (
+                           <div className="h-full flex flex-col items-center justify-center text-cyber-muted opacity-50">
+                               <CalendarDays size={48} className="mb-4"/>
+                               <p>该车间当前无进行中的机台排程</p>
+                           </div>
+                       ) : (
+                           <table className="w-full text-left border-collapse">
+                               <thead className="sticky top-0 bg-cyber-card z-10 text-xs font-mono uppercase tracking-wider text-cyber-blue shadow-lg">
+                                   <tr>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-12">客户</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30">机台号</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-16">进度</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-16">差异</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-24">当日状态</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-24">上线日</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-24">计划完工</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-24 text-cyber-orange">结关日</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-20">发料率</th>
+                                       <th className="p-1.5 border-b border-cyber-blue/30 w-[250px]">进行中平线模组详情</th>
+                                   </tr>
+                               </thead>
+                               <tbody className="text-sm font-mono divide-y divide-cyber-muted/10">
+                                   {dailyScheduleData.map((row) => (
+                                       <tr key={row.id} className="hover:bg-cyber-blue/5 transition-colors group">
+                                           <td className="p-1.5 text-cyber-muted text-xs">{(row.clientName || '').substring(0, 2)}</td>
+                                           <td className="p-1.5 font-bold text-white">{row.id}</td>
+                                           <td className="p-1.5">
+                                               <span className={`font-bold ${row.progress === 100 ? 'text-green-400' : 'text-cyber-blue'}`}>
+                                                   {row.progress}%
+                                               </span>
+                                           </td>
+                                           <td className="p-1.5">
+                                                <span className={`font-bold ${row.variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
+                                                    {row.variance > 0 ? `+${row.variance}` : row.variance}
+                                                </span>
+                                           </td>
+                                           <td className="p-1.5">
+                                               {row.dailyStatus === 'GREEN' ? (
+                                                   <span className="flex items-center gap-1 text-green-400 border border-green-500/30 bg-green-500/10 px-2 py-0.5 rounded text-xs w-fit">
+                                                       <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> 正常
+                                                   </span>
+                                               ) : (
+                                                   <span className="flex items-center gap-1 text-cyber-orange border border-cyber-orange/30 bg-cyber-orange/10 px-2 py-0.5 rounded text-xs w-fit">
+                                                       <span className="w-2 h-2 rounded-full bg-cyber-orange"></span> 滞后
+                                                   </span>
+                                               )}
+                                           </td>
+                                           <td className="p-1.5 text-cyber-muted">{new Date(row.startDate).toLocaleDateString()}</td>
+                                           <td className="p-1.5 text-white">{new Date(row.projectedDate).toLocaleDateString()}</td>
+                                           <td className="p-1.5 text-cyber-orange font-bold">
+                                               {row.closingDate ? new Date(row.closingDate).toLocaleDateString() : '-'}
+                                           </td>
+                                           <td className="p-1.5 text-cyber-muted">{row.materialRate}</td>
+                                           <td className="p-1.5 text-xs">
+                                               <div className="flex flex-col gap-1 w-[250px]">
+                                                   {row.details.map((detail: string, idx: number) => (
+                                                       <div key={idx} className="bg-cyber-bg/50 px-2 py-1 rounded border border-cyber-muted/20 text-cyber-text/80 whitespace-nowrap overflow-hidden text-ellipsis max-w-full" title={detail}>
+                                                           {detail}
+                                                       </div>
+                                                   ))}
+                                                   {row.details.length === 0 && <span className="text-cyber-muted opacity-50">全线完工或无数据</span>}
+                                               </div>
+                                           </td>
+                                       </tr>
+                                   ))}
+                               </tbody>
+                           </table>
+                       )}
+                  </div>
+              </div>
+          </div>
+        )}
+
+        <div className="max-w-7xl mx-auto animate-fade-in relative">
+            <div className="flex items-center gap-4 border-b border-cyber-blue/30 pb-6 mb-8">
+                <div className="p-4 bg-cyber-blue/10 rounded-full border border-cyber-blue/30 shadow-neon-blue">
+                    <FileDown size={32} className="text-cyber-blue" />
+                </div>
+                <div>
+                    <h2 className="text-2xl font-display font-bold text-white">数据报表中心</h2>
+                    <p className="text-cyber-muted font-mono text-sm mt-1">
+                        导出工厂运营数据，支持 Excel 格式。
+                    </p>
+                </div>
             </div>
-            <div>
-                <h2 className="text-2xl font-display font-bold text-white">数据报表中心</h2>
-                <p className="text-cyber-muted font-mono text-sm mt-1">
-                    导出工厂运营数据，支持 Excel 格式。
-                </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 {/* Card 4: Production Workshop Dynamic (Moved from Workstation) */}
+                 <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-cyan-400/50 transition-all shadow-lg flex flex-col">
+                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                         <CalendarDays size={100} />
+                     </div>
+                     
+                     <div className="flex items-center gap-3 mb-4">
+                         <Factory size={24} className="text-cyan-400" />
+                         <h3 className="text-lg font-bold text-white">生产车间动态</h3>
+                     </div>
+                     <p className="text-sm text-cyber-muted mb-6 flex-1">
+                         查看各车间（K1/K2/K3）进行中机台的日报表图表。包含红绿灯状态与平线模组进度。
+                     </p>
+                     
+                     <div className="grid grid-cols-3 gap-2">
+                         <button 
+                            onClick={() => setDailyScheduleWorkshop('K1')}
+                            className="bg-cyan-400/10 border border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,211,238,0.3)] text-xs rounded"
+                         >
+                             <Play size={12} fill="currentColor"/> K1
+                         </button>
+                         <button 
+                            onClick={() => setDailyScheduleWorkshop('K2')}
+                            className="bg-cyan-400/10 border border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,211,238,0.3)] text-xs rounded"
+                         >
+                             <Play size={12} fill="currentColor"/> K2
+                         </button>
+                         <button 
+                            onClick={() => setDailyScheduleWorkshop('K3')}
+                            className="bg-cyan-400/10 border border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,211,238,0.3)] text-xs rounded"
+                         >
+                             <Play size={12} fill="currentColor"/> K3
+                         </button>
+                     </div>
+                </div>
+
+                {/* Card 1: Production Orders */}
+                <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-cyber-blue/50 transition-all shadow-lg flex flex-col">
+                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                         <Table size={100} />
+                     </div>
+                     
+                     <div className="flex items-center gap-3 mb-4">
+                         <Table size={24} className="text-cyber-blue" />
+                         <h3 className="text-lg font-bold text-white">生产工单总表</h3>
+                     </div>
+                     <p className="text-sm text-cyber-muted mb-6 flex-1">
+                         包含所有机台的详细信息、当前状态、生产进度百分比、客户信息及计划/实际日期对比。
+                     </p>
+                     <button 
+                        onClick={handleExportOrders}
+                        className="w-full bg-cyber-blue/10 border border-cyber-blue text-cyber-blue hover:bg-cyber-blue hover:text-black py-3 px-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-neon-blue rounded"
+                     >
+                         <Download size={18} /> 导出 Excel
+                     </button>
+                </div>
+
+                {/* Card 2: Anomalies */}
+                <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-cyber-orange/50 transition-all shadow-lg flex flex-col">
+                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                         <AlertTriangle size={100} />
+                     </div>
+                     
+                     <div className="flex items-center gap-3 mb-4">
+                         <AlertTriangle size={24} className="text-cyber-orange" />
+                         <h3 className="text-lg font-bold text-white">异常记录清单</h3>
+                     </div>
+                     <p className="text-sm text-cyber-muted mb-6 flex-1">
+                         汇整全厂所有机台的异常申报记录，包含原因、责任单位及自动计算的影响天数。
+                     </p>
+                     <button 
+                        onClick={handleExportAnomalies}
+                        className="w-full bg-cyber-orange/10 border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black py-3 px-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-neon-orange rounded"
+                     >
+                         <Download size={18} /> 导出 Excel
+                     </button>
+                </div>
+
+                {/* Card 3: Logs */}
+                <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-green-500/50 transition-all shadow-lg flex flex-col">
+                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                         <FileClock size={100} />
+                     </div>
+                     
+                     <div className="flex items-center gap-3 mb-4">
+                         <FileClock size={24} className="text-green-400" />
+                         <h3 className="text-lg font-bold text-white">生产日志流水</h3>
+                     </div>
+                     <p className="text-sm text-cyber-muted mb-6 flex-1">
+                         详细的工序完工记录流水帐，包含具体的操作人员、完工时间点及相关备注。
+                     </p>
+                     <button 
+                        onClick={handleExportLogs}
+                        className="w-full bg-green-500/10 border border-green-500 text-green-400 hover:bg-green-500 hover:text-black py-3 px-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(34,197,94,0.3)] rounded"
+                     >
+                         <Download size={18} /> 导出 Excel
+                     </button>
+                </div>
             </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-             {/* Card 4: Generic Workshop Daily Schedule */}
-             <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-cyan-400/50 transition-all shadow-lg flex flex-col">
-                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                     <CalendarDays size={100} />
-                 </div>
-                 
-                 <div className="flex items-center gap-3 mb-4">
-                     <Factory size={24} className="text-cyan-400" />
-                     <h3 className="text-lg font-bold text-white">车间日排程</h3>
-                 </div>
-                 <p className="text-sm text-cyber-muted mb-6 flex-1">
-                     生成指定车间（K1/K2/K3）进行中机台的日报表，包含差异天数、当日红绿灯状态及各平线工序进度。
-                 </p>
-                 
-                 <div className="grid grid-cols-3 gap-2">
-                     <button 
-                        onClick={() => handleExportDailySchedule('K1')}
-                        className="bg-cyan-400/10 border border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,211,238,0.3)] text-xs"
-                     >
-                         <Download size={14} /> K1
-                     </button>
-                     <button 
-                        onClick={() => handleExportDailySchedule('K2')}
-                        className="bg-cyan-400/10 border border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,211,238,0.3)] text-xs"
-                     >
-                         <Download size={14} /> K2
-                     </button>
-                     <button 
-                        onClick={() => handleExportDailySchedule('K3')}
-                        className="bg-cyan-400/10 border border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-[0_0_5px_rgba(34,211,238,0.3)] text-xs"
-                     >
-                         <Download size={14} /> K3
-                     </button>
-                 </div>
-            </div>
-
-            {/* Card 1: Production Orders */}
-            <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-cyber-blue/50 transition-all shadow-lg flex flex-col">
-                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                     <Table size={100} />
-                 </div>
-                 
-                 <div className="flex items-center gap-3 mb-4">
-                     <Table size={24} className="text-cyber-blue" />
-                     <h3 className="text-lg font-bold text-white">生产工单总表</h3>
-                 </div>
-                 <p className="text-sm text-cyber-muted mb-6 flex-1">
-                     包含所有机台的详细信息、当前状态、生产进度百分比、客户信息及计划/实际日期对比。
-                 </p>
-                 <button 
-                    onClick={handleExportOrders}
-                    className="w-full bg-cyber-blue/10 border border-cyber-blue text-cyber-blue hover:bg-cyber-blue hover:text-black py-3 px-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-neon-blue"
-                 >
-                     <Download size={18} /> 导出 Excel
-                 </button>
-            </div>
-
-            {/* Card 2: Anomalies */}
-            <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-cyber-orange/50 transition-all shadow-lg flex flex-col">
-                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                     <AlertTriangle size={100} />
-                 </div>
-                 
-                 <div className="flex items-center gap-3 mb-4">
-                     <AlertTriangle size={24} className="text-cyber-orange" />
-                     <h3 className="text-lg font-bold text-white">异常记录清单</h3>
-                 </div>
-                 <p className="text-sm text-cyber-muted mb-6 flex-1">
-                     彙整全厂所有机台的异常申报记录，包含原因、责任单位及自动计算的影响天数。
-                 </p>
-                 <button 
-                    onClick={handleExportAnomalies}
-                    className="w-full bg-cyber-orange/10 border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black py-3 px-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-neon-orange"
-                 >
-                     <Download size={18} /> 导出 Excel
-                 </button>
-            </div>
-
-            {/* Card 3: Logs */}
-            <div className="bg-cyber-card border border-cyber-muted/20 p-6 relative overflow-hidden group hover:border-green-500/50 transition-all shadow-lg flex flex-col">
-                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                     <FileClock size={100} />
-                 </div>
-                 
-                 <div className="flex items-center gap-3 mb-4">
-                     <FileClock size={24} className="text-green-400" />
-                     <h3 className="text-lg font-bold text-white">生产日志流水</h3>
-                 </div>
-                 <p className="text-sm text-cyber-muted mb-6 flex-1">
-                     详细的工序完工记录流水帐，包含具体的操作人员、完工时间点及相关备注。
-                 </p>
-                 <button 
-                    onClick={handleExportLogs}
-                    className="w-full bg-green-500/10 border border-green-500 text-green-400 hover:bg-green-500 hover:text-black py-3 px-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(34,197,94,0.3)]"
-                 >
-                     <Download size={18} /> 导出 Excel
-                 </button>
-            </div>
-        </div>
-    </div>
+    </>
   );
 };

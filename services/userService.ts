@@ -185,7 +185,7 @@ export const userService = {
         // If count is 0, it means no rows were deleted. 
         // This usually happens if the ID doesn't exist OR RLS policy blocked the delete silently.
         if (count === null || count === 0) {
-            throw new Error("删除失败：数据库未受影响。请检查用户是否存在，或是否具有刪除權限 (RLS Policy)。");
+            throw new Error("删除失败：数据库未受影响。请检查用户是否存在，或是否具有删除权限 (RLS Policy)。");
         }
     }
 };

@@ -80,13 +80,28 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
   // Statistics
   const totalDuration = filteredAnomalies.reduce((sum, a) => sum + parseFloat(a.durationDays || '0'), 0);
 
+  // Helper: Correctly format ISO date to Local "YYYY-MM-DDTHH:mm" for input fields
+  const formatLocalTimeForInput = (isoString: string) => {
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return ''; // Invalid date check
+      
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   // Edit Logic
   const handleEditClick = (item: any) => {
       setEditingAnomaly({
           ...item,
-          // Ensure dates are formatted for input[type="datetime-local"]
-          startTime: item.startTime.substring(0, 16),
-          endTime: item.endTime ? item.endTime.substring(0, 16) : ''
+          // FIX: Use local time formatting helper instead of substring to prevent timezone shifting
+          startTime: formatLocalTimeForInput(item.startTime),
+          endTime: item.endTime ? formatLocalTimeForInput(item.endTime) : ''
       });
       setShowEditModal(true);
   };
@@ -153,6 +168,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
               stepName: editingAnomaly.stepName,
               reason: editingAnomaly.reason,
               department: editingAnomaly.department,
+              // Convert Local Input Time back to ISO String for storage
               startTime: new Date(editingAnomaly.startTime).toISOString(),
               endTime: editingAnomaly.endTime ? new Date(editingAnomaly.endTime).toISOString() : '',
               durationDays: editingAnomaly.durationDays,
@@ -271,7 +287,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
             <div>
                 <h2 className="text-2xl font-display font-bold text-white">全厂异常监控中心</h2>
                 <p className="text-cyber-muted font-mono text-sm mt-1">
-                    彙整所有生產機台的異常回報紀錄，追蹤責任單位與處理時效。
+                    汇整所有生产机台的异常回报纪录，追踪责任单位与处理时效。
                 </p>
             </div>
             <div className="ml-auto flex gap-4">

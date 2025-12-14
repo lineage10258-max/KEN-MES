@@ -130,6 +130,7 @@ export const orderApi = {
   // 5. Create Anomaly (New Table)
   createAnomaly: async (orderId: string, anomaly: AnomalyRecord): Promise<void> => {
       const payload = {
+          id: anomaly.id, // Explicitly insert the UUID to ensure sync
           order_id: orderId,
           step_name: anomaly.stepName,
           reason: anomaly.reason,

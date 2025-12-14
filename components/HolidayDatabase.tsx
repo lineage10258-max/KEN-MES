@@ -1,3 +1,4 @@
+
 import React, { useRef, useState } from 'react';
 import { Calendar, Info, Shield, Plus, X, FileDown, Upload } from 'lucide-react';
 import { HolidayType, HolidayRule } from '../types';
@@ -220,7 +221,7 @@ export const HolidayDatabase: React.FC<HolidayDatabaseProps> = ({ rules, onUpdat
                     <div className="mt-8 pt-6 border-t border-cyber-muted/20">
                          <h4 className="text-sm font-bold text-cyber-blue uppercase tracking-wider mb-2">应用说明</h4>
                          <ul className="list-disc list-inside text-xs text-cyber-muted space-y-1 font-mono">
-                             <li>更改此处的规则將實時保存至數據庫，并影响所有绑定了 "{currentRule.name}" 类型的机台排程。</li>
+                             <li>更改此处的规则将实时保存至数据库，并影响所有绑定了 "{currentRule.name}" 类型的机台排程。</li>
                              <li>计划完工日会自动跳过上述定义的休息日。</li>
                              <li>支持批量导入日期格式：YYYY/MM/DD 或 YYYY-MM-DD</li>
                          </ul>

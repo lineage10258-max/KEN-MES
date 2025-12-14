@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepStatusEnum, StepState, AnomalyRecord } from '../types';
 import { calculateProjectedDate } from '../services/holidayService';
-import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, CalendarDays, RotateCcw, Search } from 'lucide-react';
+import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table } from 'lucide-react';
 
 interface WorkstationProps {
   orders: WorkOrder[];
@@ -39,6 +39,8 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
   
   // Collapsed State for Parallel Modules
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
+  // New Collapsed State for Anomalies
+  const [isAnomaliesCollapsed, setIsAnomaliesCollapsed] = useState(false);
 
   // Filter States
   const [workshopTab, setWorkshopTab] = useState<'ALL' | 'K1' | 'K2' | 'K3'>('ALL');
@@ -244,7 +246,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
       }
       
       const record: AnomalyRecord = {
-          id: `AN-${Date.now()}`,
+          id: crypto.randomUUID(), 
           stepName: newAnomaly.stepName,
           reason: newAnomaly.reason,
           department: newAnomaly.department,
@@ -747,24 +749,44 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                 {/* Main Content Area - Scrollable */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative z-10">
                     
-                    {/* Anomaly Alert Section */}
+                    {/* Anomaly Alert Section - Collapsible */}
                     {selectedOrder.anomalies && selectedOrder.anomalies.length > 0 && (
-                        <div className="mb-6 space-y-2">
-                             {selectedOrder.anomalies.map((anomaly) => (
-                                 <div key={anomaly.id} className="bg-cyber-orange/10 border border-cyber-orange/30 p-3 rounded flex items-center justify-between text-xs animate-fade-in">
-                                     <div className="flex items-center gap-3">
-                                         <AlertTriangle size={16} className="text-cyber-orange" />
-                                         <div>
-                                             <div className="font-bold text-white">异常反馈: {anomaly.stepName}</div>
-                                             <div className="text-cyber-muted">原因: {anomaly.reason} | 责任: {anomaly.department}</div>
+                        <div className={`relative rounded-lg transition-all duration-300 mb-6 ${
+                            isAnomaliesCollapsed
+                            ? 'h-px bg-transparent border-0 border-t border-cyber-orange/30 mt-8'
+                            : 'p-4 pt-8 border border-cyber-orange/30 bg-cyber-orange/5 shadow-[0_0_15px_rgba(255,136,0,0.1)]'
+                        }`}>
+                            {/* Header Badge - Clickable to toggle */}
+                            <div 
+                                onClick={() => setIsAnomaliesCollapsed(!isAnomaliesCollapsed)}
+                                className="absolute -top-3 left-4 bg-cyber-card px-2 py-0.5 text-xs font-bold rounded uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all z-10 select-none shadow-[0_0_10px_rgba(0,0,0,0.5)] text-cyber-orange border border-cyber-orange hover:bg-cyber-orange hover:text-black"
+                            >
+                                <AlertTriangle size={12}/> 
+                                异常反馈 ({selectedOrder.anomalies.length})
+                                <div className="ml-2 pl-2 border-l border-cyber-orange/30 flex items-center">
+                                     {isAnomaliesCollapsed ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}
+                                </div>
+                            </div>
+
+                             {!isAnomaliesCollapsed && (
+                                 <div className="space-y-2 animate-fade-in">
+                                     {selectedOrder.anomalies.map((anomaly) => (
+                                         <div key={anomaly.id} className="bg-cyber-bg border border-cyber-orange/30 p-3 rounded flex items-center justify-between text-xs hover:border-cyber-orange transition-colors">
+                                             <div className="flex items-center gap-3">
+                                                 <AlertTriangle size={16} className="text-cyber-orange" />
+                                                 <div>
+                                                     <div className="font-bold text-white">异常反馈: {anomaly.stepName}</div>
+                                                     <div className="text-cyber-muted">原因: {anomaly.reason} | 责任: {anomaly.department}</div>
+                                                 </div>
+                                             </div>
+                                             <div className="text-right">
+                                                 <div className="text-cyber-orange">{anomaly.durationDays} 天</div>
+                                                 <div className="text-cyber-muted opacity-60">{new Date(anomaly.startTime).toLocaleDateString()}</div>
+                                             </div>
                                          </div>
-                                     </div>
-                                     <div className="text-right">
-                                         <div className="text-cyber-orange">{anomaly.durationDays} 天</div>
-                                         <div className="text-cyber-muted opacity-60">{new Date(anomaly.startTime).toLocaleDateString()}</div>
-                                     </div>
+                                     ))}
                                  </div>
-                             ))}
+                             )}
                         </div>
                     )}
 
@@ -842,10 +864,6 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                     }
 
                                     // Update global cursor for NEXT step
-                                    // If this step is PENDING or IN_PROGRESS, we add duration to cursor.
-                                    // If this step is COMPLETED, the cursor is already set to endTime above (via pendingStepCursor assignment).
-                                    // However, inside the loop 'currentStepDate' was advanced.
-                                    // For PENDING steps, we want to daisy chain.
                                     
                                     if (stepState.status !== 'COMPLETED') {
                                         pendingStepCursor = currentStepDate;

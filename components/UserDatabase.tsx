@@ -137,7 +137,7 @@ export const UserDatabase: React.FC = () => {
         } catch (e: any) {
             console.error("Delete error:", e);
             const msg = e instanceof Error ? e.message : String(e);
-            alert(`删除失败: ${msg}\n\n可能原因: 权限不足 (RLS) 或資料庫連線異常。`);
+            alert(`删除失败: ${msg}\n\n可能原因: 权限不足 (RLS) 或数据库连接异常。`);
             
             // If failed, reload list to ensure UI matches DB state
             loadUsers();
@@ -238,7 +238,7 @@ export const UserDatabase: React.FC = () => {
                                             <span className="text-cyber-blue font-bold">
                                                 {user.allowedViews?.length || 0}
                                             </span>
-                                            <span className="text-cyber-muted text-[10px] ml-1">項</span>
+                                            <span className="text-cyber-muted text-[10px] ml-1">项</span>
                                         </td>
                                         <td className="p-4 text-right">
                                             <div className="flex justify-end gap-2">
