@@ -541,112 +541,116 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
             </div>
         </div>
 
-        {/* Machine List */}
-        <div className="bg-cyber-card rounded-none shadow-sm border border-cyber-blue/30 overflow-y-auto custom-scrollbar flex-1 relative">
-             <div className="absolute top-0 left-0 w-2 h-2 border-l border-t border-cyber-blue"></div>
-             <div className="absolute top-0 right-0 w-2 h-2 border-r border-t border-cyber-blue"></div>
+        {/* Machine List - Refactored Structure for Corners */}
+        <div className="bg-cyber-card rounded-none shadow-sm border border-cyber-blue/30 flex-1 relative flex flex-col min-h-0 overflow-hidden">
+             
+             {/* Tech Corners - Fixed to frame, Larger Size */}
+             <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-cyber-blue z-20 pointer-events-none"></div>
+             <div className="absolute top-0 right-0 w-6 h-6 border-r-2 border-t-2 border-cyber-blue z-20 pointer-events-none"></div>
 
-            {filteredOrders.length === 0 ? (
-                <div className="p-8 text-center flex flex-col items-center justify-center h-full text-cyber-muted opacity-60">
-                    <Filter size={32} className="mb-2" />
-                    <p className="text-sm">无符合条件的机台</p>
-                </div>
-            ) : (
-                filteredOrders.map(order => {
-                    // Use shared logic for consistent calculation in List & Detail
-                    const { variance, projectedDate, closingDate } = calculateOrderMetrics(order);
-                    const modelName = models.find(m => m.id === order.modelId)?.name.split(' ')[0] || '';
+             <div className="overflow-y-auto custom-scrollbar flex-1">
+                {filteredOrders.length === 0 ? (
+                    <div className="p-8 text-center flex flex-col items-center justify-center h-full text-cyber-muted opacity-60">
+                        <Filter size={32} className="mb-2" />
+                        <p className="text-sm">无符合条件的机台</p>
+                    </div>
+                ) : (
+                    filteredOrders.map(order => {
+                        // Use shared logic for consistent calculation in List & Detail
+                        const { variance, projectedDate, closingDate } = calculateOrderMetrics(order);
+                        const modelName = models.find(m => m.id === order.modelId)?.name.split(' ')[0] || '';
 
-                    return (
-                        <button
-                            key={order.id}
-                            onClick={() => setSelectedOrderId(order.id)}
-                            className={`w-full text-left p-4 border-b border-cyber-muted/10 hover:bg-cyber-blue/5 transition-all focus:outline-none group relative ${
-                                selectedOrderId === order.id 
-                                ? 'bg-gradient-to-r from-cyber-blue/10 to-transparent border-l-4 border-l-cyber-blue' 
-                                : 'border-l-4 border-l-transparent'
-                            }`}
-                        >
-                            <div className="flex justify-between items-start">
-                                {/* LEFT SIDE: ID, Z-Axis, Model, Workshop */}
-                                <div className="flex flex-col items-start gap-1">
-                                    {/* Row 1: ID + Z-Axis */}
-                                    <div className="flex items-baseline gap-1">
-                                        <span className={`font-bold text-sm tracking-wide ${selectedOrderId === order.id ? 'text-white' : 'text-cyber-muted group-hover:text-white'}`}>
-                                            {order.id}
-                                        </span>
-                                        {order.zAxisTravel && (
-                                            <span className={`text-[10px] font-normal ${selectedOrderId === order.id ? 'text-white/80' : 'text-cyber-muted/70'}`}>
-                                                (Z{order.zAxisTravel.replace(/mm/gi, '').trim()})
+                        return (
+                            <button
+                                key={order.id}
+                                onClick={() => setSelectedOrderId(order.id)}
+                                className={`w-full text-left p-4 border-b border-cyber-muted/10 hover:bg-cyber-blue/5 transition-all focus:outline-none group relative ${
+                                    selectedOrderId === order.id 
+                                    ? 'bg-gradient-to-r from-cyber-blue/10 to-transparent border-l-4 border-l-cyber-blue' 
+                                    : 'border-l-4 border-l-transparent'
+                                }`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    {/* LEFT SIDE: ID, Z-Axis, Model, Workshop */}
+                                    <div className="flex flex-col items-start gap-1">
+                                        {/* Row 1: ID + Z-Axis */}
+                                        <div className="flex items-baseline gap-1">
+                                            <span className={`font-bold text-sm tracking-wide ${selectedOrderId === order.id ? 'text-white' : 'text-cyber-muted group-hover:text-white'}`}>
+                                                {order.id}
                                             </span>
-                                        )}
-                                    </div>
-                                   
-                                    {/* Row 2: Model + Workshop */}
-                                     <div className="flex items-center gap-2 text-[10px]">
-                                        <span className={`font-medium ${selectedOrderId === order.id ? 'text-cyber-blue' : 'text-cyber-muted opacity-80'}`}>
-                                            {modelName}
-                                        </span>
-                                        <span className="text-cyber-muted/30">|</span>
-                                        <span className={`${selectedOrderId === order.id ? 'text-white/50' : 'text-cyber-muted/50'}`}>
-                                            {order.workshop}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* RIGHT SIDE: Metrics & Status */}
-                                <div className="flex flex-col items-end gap-1">
-                                    <div className="flex items-center gap-2">
-                                        {/* Metrics Boxes - Enlarged and Right Aligned */}
-                                        <div className="flex gap-1">
-                                             {/* Variance Box */}
-                                             {variance !== 0 && (
-                                                 <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${
-                                                     variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'
-                                                 }`}>
-                                                     <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span>
-                                                     <div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
-                                                         {variance > 0 && <AlertTriangle size={8}/>}
-                                                         {variance > 0 ? `+${variance}` : variance}
-                                                     </div>
-                                                 </div>
-                                             )}
-                                             
-                                             {/* Planned Box (Dynamic) */}
-                                             <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                                                 <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">完工</span>
-                                                 <span className="text-xs font-bold text-cyber-blue leading-none">
-                                                     {projectedDate.getMonth() + 1}/{projectedDate.getDate()}
-                                                 </span>
-                                             </div>
-
-                                             {/* Closing Box */}
-                                             <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${
-                                                 variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'
-                                             }`}>
-                                                 <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">结关</span>
-                                                 <span className={`text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-cyber-muted'}`}>
-                                                     {closingDate ? `${closingDate.getMonth() + 1}/${closingDate.getDate()}` : '-'}
-                                                 </span>
-                                             </div>
+                                            {order.zAxisTravel && (
+                                                <span className={`text-[10px] font-normal ${selectedOrderId === order.id ? 'text-white/80' : 'text-cyber-muted/70'}`}>
+                                                    (Z{order.zAxisTravel.replace(/mm/gi, '').trim()})
+                                                </span>
+                                            )}
                                         </div>
+                                    
+                                        {/* Row 2: Model + Workshop */}
+                                        <div className="flex items-center gap-2 text-[10px]">
+                                            <span className={`font-medium ${selectedOrderId === order.id ? 'text-cyber-blue' : 'text-cyber-muted opacity-80'}`}>
+                                                {modelName}
+                                            </span>
+                                            <span className="text-cyber-muted/30">|</span>
+                                            <span className={`${selectedOrderId === order.id ? 'text-white/50' : 'text-cyber-muted/50'}`}>
+                                                {order.workshop}
+                                            </span>
+                                        </div>
+                                    </div>
 
-                                        {/* Status Badge */}
-                                        <span className={`h-10 flex items-center justify-center px-2 text-[10px] rounded uppercase border flex-shrink-0 ${
-                                            order.status === MachineStatus.IN_PROGRESS ? 'border-cyber-blue/40 text-cyber-blue' :
-                                            order.status === MachineStatus.PLANNED ? 'border-cyber-orange/40 text-cyber-orange' :
-                                            'border-green-500/40 text-green-500'
-                                        }`}>
-                                            {order.status === MachineStatus.IN_PROGRESS ? '进行中' : 
-                                             order.status === MachineStatus.PLANNED ? '排队中' : '完成'}
-                                        </span>
+                                    {/* RIGHT SIDE: Metrics & Status */}
+                                    <div className="flex flex-col items-end gap-1">
+                                        <div className="flex items-center gap-2">
+                                            {/* Metrics Boxes - Enlarged and Right Aligned */}
+                                            <div className="flex gap-1">
+                                                {/* Variance Box */}
+                                                {variance !== 0 && (
+                                                    <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${
+                                                        variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'
+                                                    }`}>
+                                                        <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span>
+                                                        <div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
+                                                            {variance > 0 && <AlertTriangle size={8}/>}
+                                                            {variance > 0 ? `+${variance}` : variance}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                
+                                                {/* Planned Box (Dynamic) */}
+                                                <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
+                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">生产完工</span>
+                                                    <span className="text-xs font-bold text-cyber-blue leading-none">
+                                                        {projectedDate.getMonth() + 1}/{projectedDate.getDate()}
+                                                    </span>
+                                                </div>
+
+                                                {/* Closing Box */}
+                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${
+                                                    variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'
+                                                }`}>
+                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">结关</span>
+                                                    <span className={`text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-cyber-muted'}`}>
+                                                        {closingDate ? `${closingDate.getMonth() + 1}/${closingDate.getDate()}` : '-'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Status Badge */}
+                                            <span className={`h-10 flex items-center justify-center px-2 text-[10px] rounded uppercase border flex-shrink-0 ${
+                                                order.status === MachineStatus.IN_PROGRESS ? 'border-cyber-blue/40 text-cyber-blue' :
+                                                order.status === MachineStatus.PLANNED ? 'border-cyber-orange/40 text-cyber-orange' :
+                                                'border-green-500/40 text-green-500'
+                                            }`}>
+                                                {order.status === MachineStatus.IN_PROGRESS ? '进行中' : 
+                                                order.status === MachineStatus.PLANNED ? '排队中' : '完成'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </button>
-                    );
-                })
-            )}
+                            </button>
+                        );
+                    })
+                )}
+            </div>
         </div>
       </div>
 
@@ -712,7 +716,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
 
                                 {/* Card 3: Projected Date */}
                                 <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
-                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">计划完工</span>
+                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产完工</span>
                                     <span className="text-sm font-bold text-cyber-blue drop-shadow-md">
                                         {dateMetrics.projectedDate.getMonth()+1}/{dateMetrics.projectedDate.getDate()}
                                     </span>

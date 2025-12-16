@@ -16,8 +16,8 @@ import { orderApi } from './services/orderApi';
 import { modelApi } from './services/modelApi';
 import { holidayApi } from './services/holidayApi';
 import { userService } from './services/userService';
-import { DEFAULT_HOLIDAY_RULES } from './services/holidayService';
-import { View, WorkOrder, MachineStatus, MachineModel, StepStatusEnum, HolidayRule, HolidayType, StepState, AppUser, UserRole, AnomalyRecord } from './types';
+import { DEFAULT_HOLIDAY_RULES, calculateProjectedDate } from './services/holidayService';
+import { View, WorkOrder, MachineStatus, MachineModel, StepStatusEnum, HolidayRule, HolidayType, StepState, AppUser, UserRole, AnomalyRecord, ProcessStep } from './types';
 import { Loader2 } from 'lucide-react';
 
 function App() {
@@ -108,8 +108,8 @@ function App() {
       const model = models.find(m => m.id === targetOrder.modelId);
       const stepInfo = model?.steps.find(s => s.id === stepId);
 
+      // 1. Update Step State
       const newStepStates = { ...targetOrder.stepStates };
-      
       newStepStates[stepId] = {
           status: status,
           startTime: status === 'IN_PROGRESS' ? new Date().toISOString() : newStepStates[stepId]?.startTime,
@@ -117,6 +117,7 @@ function App() {
           operator: currentUser ? `${currentUser.name}` : 'Unknown'
       };
 
+      // 2. Update Logs
       const newLogs = [...(targetOrder.logs || [])];
       if (status === 'COMPLETED') {
            newLogs.push({
@@ -127,13 +128,49 @@ function App() {
            });
       }
 
+      // 3. Recalculate Metrics (Completed Count)
       const completedSteps = Object.values(newStepStates).filter((s: StepState) => s.status === 'COMPLETED').length;
       
+      // 4. Recalculate Estimated Completion Date (Dynamic Update to DB)
+      // This ensures the DB always has the "Real-time" projected date based on remaining work
+      let newEstimatedDate = targetOrder.estimatedCompletionDate;
+      
+      if (model) {
+          // Helper to get remaining hours based on the NEW state
+          const getRemainingHoursForStep = (s: ProcessStep) => {
+             const currentStatus = newStepStates[s.id]?.status;
+             // If completed, 0 hours remaining. If pending or in-progress, full hours (simplified logic)
+             return currentStatus === 'COMPLETED' ? 0 : s.estimatedHours;
+          };
+
+          let remainingHours = 0;
+          
+          if (model.scheduleCalculationModule) {
+              // Specific module rule
+              const moduleSteps = model.steps.filter(s => s.parallelModule === model.scheduleCalculationModule);
+              remainingHours = moduleSteps.reduce((acc, s) => acc + getRemainingHoursForStep(s), 0);
+          } else {
+              // Longest parallel line rule
+              const moduleRemaining: Record<string, number> = {};
+              model.steps.forEach(s => {
+                  const key = s.parallelModule || '通用';
+                  const h = getRemainingHoursForStep(s);
+                  moduleRemaining[key] = (moduleRemaining[key] || 0) + h;
+              });
+              remainingHours = Math.max(0, ...Object.values(moduleRemaining));
+          }
+          
+          // Project new date starting from NOW
+          const now = new Date();
+          newEstimatedDate = calculateProjectedDate(now, remainingHours, targetOrder.holidayType).toISOString();
+      }
+
       const updatedOrder: WorkOrder = {
           ...targetOrder,
           stepStates: newStepStates,
           logs: newLogs,
-          currentStepIndex: completedSteps
+          currentStepIndex: completedSteps,
+          estimatedCompletionDate: newEstimatedDate // Save the recalculated date
       };
 
       setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));

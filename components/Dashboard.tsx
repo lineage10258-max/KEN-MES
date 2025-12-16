@@ -1,9 +1,10 @@
 
 import React, { useMemo, useState } from 'react';
 import { WorkOrder, MachineModel, MachineStatus, ProcessStep } from '../types';
-import { Calendar, MapPin, Brain, Sparkles, RefreshCw, Factory, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Calendar, MapPin, Brain, Sparkles, RefreshCw, Factory, AlertTriangle, CheckCircle2, BarChart3 } from 'lucide-react';
 import { generateFactoryInsight } from '../services/geminiService';
 import { calculateProjectedDate } from '../services/holidayService';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface DashboardProps {
   orders: WorkOrder[];
@@ -90,6 +91,66 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
         monthlyCompletes
     };
   }, [orders]);
+
+  // --- Anomaly Chart Data Calculation ---
+  const anomalyChartData = useMemo(() => {
+    const today = new Date();
+    const resultData: any[] = [];
+    const departments = new Set<string>();
+
+    // Generate last 3 months (including current)
+    for (let i = 2; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const year = d.getFullYear();
+        const month = d.getMonth();
+        const label = `${month + 1}月`;
+        
+        const monthData: any = { name: label };
+
+        // Initialize counters for known departments (optional, but good for consistent colors later if needed)
+        // We will dynamically add them instead
+
+        // Find anomalies in this month
+        orders.forEach(order => {
+            if (order.anomalies) {
+                order.anomalies.forEach(anomaly => {
+                    const anomalyDate = new Date(anomaly.startTime);
+                    if (anomalyDate.getFullYear() === year && anomalyDate.getMonth() === month) {
+                        const dept = anomaly.department || '未分类';
+                        departments.add(dept);
+                        
+                        const days = parseFloat(anomaly.durationDays || '0');
+                        monthData[dept] = (monthData[dept] || 0) + days;
+                    }
+                });
+            }
+        });
+
+        resultData.push(monthData);
+    }
+
+    return { data: resultData, activeDepartments: Array.from(departments) };
+  }, [orders]);
+
+  // Department Colors Map
+  const DEPT_COLORS: Record<string, string> = {
+      '生产': '#ef4444', // Red
+      '电控': '#eab308', // Yellow
+      'KA': '#3b82f6',   // Blue
+      '采购': '#10b981', // Green
+      '生管': '#8b5cf6', // Violet
+      '设计': '#f97316', // Orange
+      '仓库': '#6366f1', // Indigo
+      '业务': '#ec4899', // Pink
+      '应用': '#14b8a6', // Teal
+      '未分类': '#94a3b8' // Gray
+  };
+  const getDeptColor = (dept: string, index: number) => {
+      if (DEPT_COLORS[dept]) return DEPT_COLORS[dept];
+      // Fallback colors
+      const fallback = ['#06b6d4', '#84cc16', '#d946ef']; 
+      return fallback[index % fallback.length];
+  };
 
   // Determine which list to show based on mode
   const activeScheduleList = scheduleMode === 'START' ? stats.monthlyStarts : stats.monthlyCompletes;
@@ -242,8 +303,65 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
             ))}
         </div>
 
-        {/* Right Sidebar: Monthly Schedule & AI Diagnosis */}
+        {/* Right Sidebar: Anomaly Chart, Schedule & AI Diagnosis */}
         <div className="space-y-6">
+
+          {/* Module New: Anomaly Chart */}
+          <div className="bg-cyber-card border border-cyber-blue/30 relative overflow-hidden flex flex-col min-h-[300px]">
+             {/* Header */}
+             <div className="p-3 border-b border-cyber-blue/20 bg-cyber-bg/50 flex items-center gap-2">
+                <BarChart3 size={16} className="text-cyber-orange"/>
+                <span className="font-display font-bold text-white text-sm">各部門異常天數 (近3個月)</span>
+             </div>
+
+             <div className="p-4 flex-1 h-[250px] w-full text-xs">
+                 {anomalyChartData.activeDepartments.length === 0 ? (
+                     <div className="h-full flex flex-col items-center justify-center text-cyber-muted opacity-50">
+                         <AlertTriangle size={32} className="mb-2"/>
+                         <p>近三月无异常记录</p>
+                     </div>
+                 ) : (
+                     <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={anomalyChartData.data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                             <XAxis 
+                                dataKey="name" 
+                                stroke="#94a3b8" 
+                                tick={{fontSize: 10}} 
+                                axisLine={false} 
+                                tickLine={false}
+                             />
+                             <YAxis 
+                                stroke="#94a3b8" 
+                                tick={{fontSize: 10}} 
+                                axisLine={false} 
+                                tickLine={false}
+                                label={{ value: '天数', angle: -90, position: 'insideLeft', fill: '#64748b', fontSize: 10 }}
+                             />
+                             <Tooltip 
+                                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f1f5f9', fontSize: '12px' }}
+                                itemStyle={{ padding: 0 }}
+                                formatter={(value: number) => [`${value.toFixed(1)} 天`, '']}
+                             />
+                             <Legend 
+                                wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} 
+                                iconType="circle"
+                             />
+                             {anomalyChartData.activeDepartments.map((dept, index) => (
+                                 <Bar 
+                                    key={dept} 
+                                    dataKey={dept} 
+                                    fill={getDeptColor(dept, index)} 
+                                    // stackId removed to enable Clustered Bar Chart
+                                    radius={[2, 2, 0, 0]}
+                                    barSize={12} // Slim bars for clustered look
+                                 />
+                             ))}
+                         </BarChart>
+                     </ResponsiveContainer>
+                 )}
+             </div>
+          </div>
           
           {/* Module 1: Monthly Schedule / Completion */}
           <div className="bg-cyber-card border border-cyber-blue/30 relative overflow-hidden flex flex-col min-h-[400px]">
@@ -398,21 +516,21 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, unit, theme }) => {
     const textColor = theme === 'blue' ? 'text-cyber-blue' : 'text-cyber-orange';
 
     return (
-        <div className={`bg-cyber-card/90 border-[0.5px] ${borderColor} h-[50px] flex items-center justify-between px-3 py-1.5 shadow-lg relative overflow-hidden transition-all hover:scale-[1.02] group`}>
+        <div className={`bg-cyber-card/90 border-[0.5px] ${borderColor} h-[54px] flex items-center justify-between px-4 py-1.5 shadow-lg relative overflow-hidden transition-all hover:scale-[1.02] group`}>
             {/* Background Effect */}
             <div className={`absolute inset-0 bg-gradient-to-r ${theme === 'blue' ? 'from-cyber-blue/10' : 'from-cyber-orange/10'} to-transparent opacity-0 group-hover:opacity-100 transition-opacity`}></div>
             
             {/* Left: Title */}
-            <span className={`text-lg font-display font-bold tracking-wide ${textColor} drop-shadow-md`}>
+            <span className={`text-sm font-display font-bold tracking-wide ${textColor} drop-shadow-md`}>
                 {title}
             </span>
 
             {/* Right: Data */}
             <div className="flex items-baseline gap-1 relative z-10">
-                <span className="text-xl font-mono font-bold text-white drop-shadow-md">
+                <span className="text-3xl font-mono font-normal text-white drop-shadow-md">
                     {value}
                 </span>
-                {unit && <span className="text-xs text-white font-mono">{unit}</span>}
+                {unit && <span className="text-[10px] text-white font-mono opacity-80">{unit}</span>}
             </div>
         </div>
     );
@@ -548,9 +666,9 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false })
                         </div>
                     </div>
 
-                    {/* 2. Planned Completion */}
+                    {/* 2. Planned Completion (RENAMED TO PRODUCTION COMPLETION) */}
                     <div className="flex flex-col items-center justify-center w-16 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">计划完工</span>
+                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">生产完工</span>
                         <span className="text-sm font-bold text-cyber-blue leading-none">
                             {projectedDate.getMonth() + 1}/{projectedDate.getDate()}
                         </span>

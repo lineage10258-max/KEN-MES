@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MachineModel, WorkOrder, MachineStatus, HolidayType } from '../types';
 import { calculateProjectedDate } from '../services/holidayService';
-import { Plus, Calendar, Disc, Hash, Factory, Save, Filter, Edit, Trash2, X, User, Settings, CalendarClock, Lock, FileDown, Upload, Search, ChevronDown, CheckSquare, Square, Layers } from 'lucide-react';
+import { Plus, Calendar, Disc, Hash, Factory, Save, Filter, Edit, Trash2, X, User, Settings, CalendarClock, Lock, FileDown, Upload, Search, ChevronDown, CheckSquare, Square, Layers, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface OrderDatabaseProps {
@@ -102,7 +102,7 @@ const MultiSelectFilter: React.FC<{
 };
 
 export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, onAddOrder, onUpdateOrder, onDeleteOrder }) => {
-  const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE'>('LIST');
+  const [activeTab, setActiveTab] = useState<'LIST' | 'CREATE' | 'EXPORT'>('LIST');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter State
@@ -135,6 +135,9 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
   const [existingStepIndex, setExistingStepIndex] = useState<number>(0);
   const [existingLogs, setExistingLogs] = useState<any[]>([]);
   const [existingStepStates, setExistingStepStates] = useState<Record<string, any>>({});
+  
+  // Preserve original estimated date
+  const [existingOriginalDate, setExistingOriginalDate] = useState<string | undefined>(undefined);
 
   // Filter Logic
   const filteredOrders = orders.filter(order => {
@@ -217,6 +220,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
     setExistingStepIndex(0);
     setExistingLogs([]);
     setExistingStepStates({});
+    setExistingOriginalDate(undefined);
   };
 
   const handleEditClick = (order: WorkOrder) => {
@@ -246,6 +250,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
     setExistingStepIndex(order.currentStepIndex);
     setExistingLogs(order.logs);
     setExistingStepStates(order.stepStates || {});
+    setExistingOriginalDate(order.originalEstimatedCompletionDate);
 
     setActiveTab('CREATE');
   };
@@ -261,6 +266,8 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
         return;
     }
 
+    const estimatedDateISO = new Date(endDate).toISOString();
+
     const orderPayload: WorkOrder = {
         id: machineId,
         modelId: selectedModelId,
@@ -268,7 +275,10 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
         currentStepIndex: editingOrderId ? existingStepIndex : 0,
         workshop: workshop,
         startDate: new Date(startDate).toISOString(),
-        estimatedCompletionDate: new Date(endDate).toISOString(),
+        estimatedCompletionDate: estimatedDateISO,
+        // If creating new, set original to the initial estimated. If editing, keep original.
+        originalEstimatedCompletionDate: editingOrderId ? existingOriginalDate : estimatedDateISO,
+        
         businessClosingDate: businessDate ? new Date(businessDate).toISOString() : undefined,
         
         // Add new fields to payload
@@ -293,6 +303,35 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
     
     resetForm();
     setActiveTab('LIST');
+  };
+
+  // --- Export Full List Logic ---
+  const handleExportCurrentList = () => {
+      const exportData = orders.map(order => {
+        const modelName = models.find(m => m.id === order.modelId)?.name || order.modelId;
+        return {
+            "机台号": order.id,
+            "机型": modelName,
+            "状态": order.status === 'IN_PROGRESS' ? '进行中' : order.status === 'COMPLETED' ? '已完成' : '计划中',
+            "生产车间": order.workshop,
+            "客户名称": order.clientName || '',
+            "计划上线日期": order.startDate ? new Date(order.startDate).toLocaleDateString() : '',
+            "生产完工日期": order.estimatedCompletionDate ? new Date(order.estimatedCompletionDate).toLocaleDateString() : '',
+            "业务结关日期": order.businessClosingDate ? new Date(order.businessClosingDate).toLocaleDateString() : '',
+            "假日别": order.holidayType,
+            // Specs
+            "二轴头": order.axisHead || '',
+            "刀柄规格": order.toolHolderSpec || '',
+            "刀库数": order.magazineCount || '',
+            "Z轴行程": order.zAxisTravel || '',
+            "主轴转速": order.spindleSpeed || ''
+        };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "机台名录总表");
+    XLSX.writeFile(wb, `机台名录总表_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // --- Excel Import Logic ---
@@ -388,6 +427,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
               // Updated Logic: Use effective hours (longest line or specific module)
               const effectiveHours = calculateEffectiveHours(model);
               const projected = calculateProjectedDate(new Date(startIso), effectiveHours, holidayTypeVal);
+              const projectedISO = projected.toISOString();
               
               // Business Closing Date
               let closingIso = undefined;
@@ -406,7 +446,8 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                   currentStepIndex: 0,
                   workshop: workshopVal,
                   startDate: startIso,
-                  estimatedCompletionDate: projected.toISOString(),
+                  estimatedCompletionDate: projectedISO,
+                  originalEstimatedCompletionDate: projectedISO, // Set original same as initial projected
                   businessClosingDate: closingIso,
                   holidayType: holidayTypeVal,
                   clientName: client,
@@ -470,9 +511,42 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
             >
                 [ {editingOrderId ? '编辑机台数据' : '机台投产登记'} ]
             </button>
+             <button 
+                onClick={() => setActiveTab('EXPORT')}
+                className={`px-6 py-3 font-mono text-sm transition-all ${activeTab === 'EXPORT' ? 'bg-cyber-blue/10 text-cyber-blue border-b-2 border-cyber-blue' : 'text-cyber-muted hover:text-white'}`}
+            >
+                [ 资料导出 ]
+            </button>
         </div>
+        
+        {activeTab === 'EXPORT' && (
+            <div className="bg-cyber-card border border-cyber-blue/30 p-12 shadow-neon-blue flex flex-col items-center justify-center min-h-[400px] animate-fade-in relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-5">
+                    <Download size={200} />
+                </div>
+                
+                <div className="w-24 h-24 bg-cyber-blue/10 rounded-full flex items-center justify-center mb-6 border border-cyber-blue/30 shadow-[0_0_30px_rgba(0,240,255,0.2)]">
+                    <FileDown size={48} className="text-cyber-blue" />
+                </div>
+                
+                <h2 className="text-2xl font-display font-bold text-white mb-2 tracking-widest">机台数据库导出</h2>
+                <p className="text-cyber-muted font-mono mb-8 text-center max-w-md">
+                    将当前系统内所有机台（包含计划中、进行中、已完成）的完整数据导出为 Excel 报表文件。
+                    <br/>
+                    <span className="text-xs opacity-60">包含：机台号、机型、车间、客户、各项技术规格、状态及日期信息。</span>
+                </p>
+                
+                <button 
+                    onClick={handleExportCurrentList}
+                    className="group bg-cyber-blue hover:bg-white text-black font-bold py-4 px-10 shadow-neon-blue transition-all flex items-center justify-center gap-3 tracking-wider hover:scale-105"
+                >
+                    <Download size={20} className="group-hover:text-black" /> 
+                    立即导出 Excel
+                </button>
+            </div>
+        )}
 
-        {activeTab === 'CREATE' ? (
+        {activeTab === 'CREATE' && (
              <div className="bg-cyber-card border border-cyber-blue/30 p-8 relative overflow-hidden shadow-neon-blue max-w-5xl mx-auto">
                 <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
                     <Factory size={120} className="text-cyber-blue" />
@@ -616,7 +690,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                             </div>
                             <div>
                                 <label className="block text-xs font-mono text-cyber-blue mb-2 uppercase tracking-wider flex items-center gap-2">
-                                    <Calendar size={14}/> 预计完工日期 (系统自动)
+                                    <Calendar size={14}/> 生产完工 (系统自动)
                                 </label>
                                 <div className="relative">
                                     <input 
@@ -723,7 +797,9 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                     </button>
                 </div>
              </div>
-        ) : (
+        )}
+
+        {activeTab === 'LIST' && (
             <div className="bg-cyber-card border border-cyber-muted/20">
                 <div className="p-4 border-b border-cyber-blue/20 bg-cyber-bg/50 space-y-4">
                     <div className="flex flex-wrap items-center gap-4">

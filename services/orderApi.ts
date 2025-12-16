@@ -11,6 +11,7 @@ const mapFromDb = (row: any): WorkOrder => ({
     workshop: row.workshop,
     startDate: row.start_date,
     estimatedCompletionDate: row.estimated_completion_date,
+    originalEstimatedCompletionDate: row.original_estimated_completion_date, // Map from DB
     businessClosingDate: row.business_closing_date,
     holidayType: row.holiday_type || 'DOUBLE',
     
@@ -49,6 +50,7 @@ const mapToDb = (order: WorkOrder) => ({
     workshop: order.workshop,
     start_date: order.startDate,
     estimated_completion_date: order.estimatedCompletionDate,
+    original_estimated_completion_date: order.originalEstimatedCompletionDate, // Map to DB
     business_closing_date: order.businessClosingDate,
     holiday_type: order.holidayType,
     

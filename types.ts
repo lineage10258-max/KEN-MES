@@ -88,7 +88,10 @@ export interface WorkOrder {
   currentStepIndex: number; // Deprecated conceptually, but kept for compatibility or overall progress calc
   workshop: string; // New field: 生产车间
   startDate: string; // ISO Date: 计划上线日
-  estimatedCompletionDate: string; // ISO Date: 计划完工日
+  
+  estimatedCompletionDate: string; // ISO Date: 实时的生产完工日 (Production Completion)
+  originalEstimatedCompletionDate?: string; // ISO Date: 原始的计划完工日 (Planned Completion)
+
   businessClosingDate?: string; // New field: 业务结关日
   
   // New Fields for Order Details
