@@ -1,18 +1,19 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepStatusEnum, StepState, AnomalyRecord } from '../types';
-import { calculateProjectedDate } from '../services/holidayService';
+import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepStatusEnum, StepState, AnomalyRecord, HolidayRule, HolidayType } from '../types';
+import { calculateProjectedDate, isWorkingDay, DEFAULT_HOLIDAY_RULES } from '../services/holidayService';
 import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table } from 'lucide-react';
 
 interface WorkstationProps {
   orders: WorkOrder[];
   models: MachineModel[];
+  holidayRules?: Record<HolidayType, HolidayRule>; // Added prop
   onUpdateStepStatus: (orderId: string, stepId: string, status: StepStatusEnum) => void;
   onStatusChange: (orderId: string, status: MachineStatus) => void;
   onAddAnomaly: (orderId: string, anomaly: AnomalyRecord) => void;
 }
 
-export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpdateStepStatus, onStatusChange, onAddAnomaly }) => {
+export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holidayRules = DEFAULT_HOLIDAY_RULES, onUpdateStepStatus, onStatusChange, onAddAnomaly }) => {
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   
   // Step Interaction State
@@ -46,7 +47,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
   const [workshopTab, setWorkshopTab] = useState<'ALL' | 'K1' | 'K2' | 'K3'>('ALL');
   const [statusTab, setStatusTab] = useState<'ALL' | MachineStatus>(MachineStatus.IN_PROGRESS);
 
-  // Filter Logic & Sort Logic (By Start Date Ascending)
+  // Filter Logic & Sort Logic (By Business Closing Date Ascending)
   const filteredOrders = orders.filter(o => {
       // 1. Workshop Filter
       const matchWorkshop = workshopTab === 'ALL' || (o.workshop?.startsWith(workshopTab) ?? false);
@@ -56,9 +57,22 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
 
       return matchWorkshop && matchStatus;
   }).sort((a, b) => {
-      // Earliest Start Date First
-      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+      // Sort by Business Closing Date (Ascending)
+      // If businessClosingDate is missing, put it at the end (MAX_SAFE_INTEGER)
+      const dateA = a.businessClosingDate ? new Date(a.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const dateB = b.businessClosingDate ? new Date(b.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
+      
+      return dateA - dateB;
   });
+
+  // Helper to count orders for status tabs
+  const getStatusCount = (key: 'ALL' | MachineStatus) => {
+      return orders.filter(o => {
+          const matchWorkshop = workshopTab === 'ALL' || (o.workshop?.startsWith(workshopTab) ?? false);
+          const matchStatus = key === 'ALL' || o.status === key;
+          return matchWorkshop && matchStatus;
+      }).length;
+  };
 
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
   const selectedModel = selectedOrder ? models.find(m => m.id === selectedOrder.modelId) : null;
@@ -74,7 +88,15 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
           groups[pMod].push({ ...step, index });
       });
       
-      return Object.keys(groups).sort().reduce((acc, key) => {
+      // Sort keys based on the number of steps in each group (ascending)
+      // If counts are equal, fallback to alphabetical for stability
+      const sortedKeys = Object.keys(groups).sort((a, b) => {
+          const diff = groups[a].length - groups[b].length;
+          if (diff !== 0) return diff;
+          return a.localeCompare(b);
+      });
+
+      return sortedKeys.reduce((acc, key) => {
           acc[key] = groups[key];
           return acc;
       }, {} as Record<string, (ProcessStep & { index: number })[]>);
@@ -87,7 +109,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
       const model = models.find(m => m.id === order.modelId);
       if (!model) return { variance: 0, projectedDate: new Date(), closingDate: null };
 
-      // 1. Calculate remaining hours (same logic as used in Detail View)
+      // 1. Calculate remaining hours based on uncompleted steps
       let remainingHours = 0;
       const getRemainingHoursForStep = (s: ProcessStep) => {
           const isCompleted = order.stepStates?.[s.id]?.status === 'COMPLETED';
@@ -205,7 +227,6 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
           const totalDays = totalHours / HOURS_PER_DAY;
           
           // Format to max 1 decimal place (e.g., 1.5, 1, 0.5)
-          // parseFloat removes trailing zeros (1.0 -> 1)
           const formattedDays = parseFloat(totalDays.toFixed(1)).toString();
 
           setNewAnomaly(prev => ({ ...prev, durationDays: formattedDays }));
@@ -442,6 +463,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                             >
                                 <option value="">-- 请选择部门 --</option>
                                 <option value="生产">生产</option>
+                                <option value="品管">品管</option>
                                 <option value="电控">电控</option>
                                 <option value="KA">KA</option>
                                 <option value="应用">应用</option>
@@ -535,7 +557,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                             : 'text-cyber-muted hover:text-white hover:bg-white/5'
                         }`}
                     >
-                        {status.label}
+                        {status.label} <span className="opacity-80 font-mono">({getStatusCount(status.key as any)}台)</span>
                     </button>
                 ))}
             </div>
@@ -573,16 +595,11 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                 <div className="flex justify-between items-start">
                                     {/* LEFT SIDE: ID, Z-Axis, Model, Workshop */}
                                     <div className="flex flex-col items-start gap-1">
-                                        {/* Row 1: ID + Z-Axis */}
+                                        {/* Row 1: ID Only (Removed Z-Axis) */}
                                         <div className="flex items-baseline gap-1">
                                             <span className={`font-bold text-sm tracking-wide ${selectedOrderId === order.id ? 'text-white' : 'text-cyber-muted group-hover:text-white'}`}>
                                                 {order.id}
                                             </span>
-                                            {order.zAxisTravel && (
-                                                <span className={`text-[10px] font-normal ${selectedOrderId === order.id ? 'text-white/80' : 'text-cyber-muted/70'}`}>
-                                                    (Z{order.zAxisTravel.replace(/mm/gi, '').trim()})
-                                                </span>
-                                            )}
                                         </div>
                                     
                                         {/* Row 2: Model + Workshop */}
@@ -597,11 +614,11 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                         </div>
                                     </div>
 
-                                    {/* RIGHT SIDE: Metrics & Status */}
-                                    <div className="flex flex-col items-end gap-1">
-                                        <div className="flex items-center gap-2">
+                                    {/* RIGHT SIDE: Metrics & Status - Force Right Align */}
+                                    <div className="flex flex-col items-end gap-1 ml-auto">
+                                        <div className="flex items-center gap-2 justify-end">
                                             {/* Metrics Boxes - Enlarged and Right Aligned */}
-                                            <div className="flex gap-1">
+                                            <div className="flex gap-1 justify-end">
                                                 {/* Variance Box */}
                                                 {variance !== 0 && (
                                                     <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${
@@ -617,7 +634,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                                 
                                                 {/* Planned Box (Dynamic) */}
                                                 <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">生产完工</span>
+                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">完工</span>
                                                     <span className="text-xs font-bold text-cyber-blue leading-none">
                                                         {projectedDate.getMonth() + 1}/{projectedDate.getDate()}
                                                     </span>
@@ -817,11 +834,16 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                 const isCollapsed = collapsedModules[parallelMod];
                                 const isModuleFullyComplete = steps.length > 0 && moduleCompleted === steps.length;
                                 
-                                // --- New Schedule Expansion Logic: Multi-day steps occupy multiple blocks ---
-                                // Pre-calculate dates for ALL steps/days in this module for Grid rendering
+                                // --- UPDATED Schedule Expansion Logic ---
                                 let pendingStepCursor = selectedOrder.startDate ? new Date(selectedOrder.startDate) : new Date();
+                                // Ensure start at 8:30 if it's earlier
+                                if (pendingStepCursor.getHours() < 8 || (pendingStepCursor.getHours() === 8 && pendingStepCursor.getMinutes() < 30)) {
+                                    pendingStepCursor.setHours(8, 30, 0, 0);
+                                }
 
-                                // Flatten Steps into Day-Slots
+                                // Helper: Get the active rule object from the passed prop (defaulting to double if missing)
+                                const rule = holidayRules[selectedOrder.holidayType] || DEFAULT_HOLIDAY_RULES['DOUBLE'];
+
                                 const dailyAllocations: Array<{
                                     date: Date,
                                     step: ProcessStep,
@@ -832,51 +854,151 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, onUpda
                                 steps.forEach(step => {
                                     const stepState = selectedOrder.stepStates?.[step.id] || { status: 'PENDING' };
                                     
-                                    // Determine Start Date for this step
-                                    let currentStepDate = new Date();
-                                    
                                     if (stepState.status === 'COMPLETED' && stepState.endTime) {
-                                        // Fix: Use actual EndTime for COMPLETED steps instead of projected timeline
-                                        currentStepDate = new Date(stepState.endTime);
-                                        // Sync cursor to this completion time so subsequent PENDING steps start after this
-                                        pendingStepCursor = new Date(stepState.endTime);
-                                    } else if (stepState.status === 'IN_PROGRESS' && stepState.startTime) {
-                                        currentStepDate = new Date(stepState.startTime);
-                                        // Reset cursor to track this real-time start
-                                        pendingStepCursor = new Date(currentStepDate);
-                                    } else {
-                                        // Pending
-                                        currentStepDate = new Date(pendingStepCursor);
-                                    }
-
-                                    // Determine duration in days (Assume 8h/day)
-                                    // e.g. 16h = 2 days
-                                    const daysRequired = Math.ceil(step.estimatedHours / 8) || 1;
-
-                                    for (let i = 1; i <= daysRequired; i++) {
-                                        // Add allocation for this day
+                                        // 1. Completed: Anchor to Actual End Time
+                                        const endTime = new Date(stepState.endTime);
+                                        
+                                        // Place in grid
                                         dailyAllocations.push({
-                                            date: new Date(currentStepDate),
-                                            step: step,
-                                            status: stepState.status || 'PENDING',
-                                            partLabel: daysRequired > 1 ? `(${i}/${daysRequired})` : ''
+                                            date: new Date(endTime),
+                                            step,
+                                            status: 'COMPLETED',
+                                            partLabel: ''
                                         });
 
-                                        // Advance cursor to next working day
-                                        const nextDay = calculateProjectedDate(currentStepDate, 8, selectedOrder.holidayType);
-                                        currentStepDate = nextDay;
-                                    }
+                                        // Update Cursor to MAX(current cursor, Actual End Time)
+                                        // This ensures that if we have multiple completed steps, the cursor is at the latest point
+                                        if (endTime > pendingStepCursor) {
+                                            pendingStepCursor = new Date(endTime);
+                                        }
+                                        
+                                        // If the actual end time is past 16:30 (8h shift end), the NEXT step should start next day 8:30
+                                        const endH = pendingStepCursor.getHours() + pendingStepCursor.getMinutes()/60;
+                                        if (endH >= 16.5) {
+                                            pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
+                                            pendingStepCursor.setHours(8, 30, 0, 0);
+                                        }
 
-                                    // Update global cursor for NEXT step
-                                    
-                                    if (stepState.status !== 'COMPLETED') {
-                                        pendingStepCursor = currentStepDate;
+                                    } else if (stepState.status === 'IN_PROGRESS' && stepState.startTime) {
+                                        // 2. In Progress: Anchor to Actual Start, Simulate Duration
+                                        const startTime = new Date(stepState.startTime);
+                                        
+                                        dailyAllocations.push({
+                                            date: new Date(startTime),
+                                            step,
+                                            status: 'IN_PROGRESS',
+                                            partLabel: ''
+                                        });
+
+                                        // Simulation Cursor for THIS ACTIVE STEP specifically
+                                        // We don't want to reset the GLOBAL pendingStepCursor to the past.
+                                        let simulationCursor = new Date(startTime);
+                                        
+                                        // Simulate duration consumption to find End Date for this active step
+                                        let hoursToSimulate = step.estimatedHours;
+                                        
+                                        while (hoursToSimulate > 0) {
+                                             // 1. Check Working Day
+                                             if (!isWorkingDay(simulationCursor, rule)) {
+                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
+                                                 simulationCursor.setHours(8, 30, 0, 0);
+                                                 continue;
+                                             }
+
+                                             // 2. Check Capacity in Current Day
+                                             // End of shift is 16:30 (8.5 + 8)
+                                             const currentH = simulationCursor.getHours() + simulationCursor.getMinutes()/60;
+                                             const endOfDay = 16.5; 
+
+                                             if (currentH >= endOfDay) {
+                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
+                                                 simulationCursor.setHours(8, 30, 0, 0);
+                                                 continue;
+                                             }
+
+                                             // Consume
+                                             const hoursInDay = endOfDay - currentH;
+                                             const consumed = Math.min(hoursToSimulate, hoursInDay);
+                                             
+                                             hoursToSimulate -= consumed;
+                                             
+                                             // Advance Simulation Cursor
+                                             simulationCursor.setTime(simulationCursor.getTime() + consumed * 3600 * 1000);
+                                        }
+
+                                        // CRITICAL FIX: Ensure global cursor respects this active step's finish time.
+                                        // We only push the global cursor forward, never backward.
+                                        // This handles the "Slide Unit overlapping Base Unit" issue.
+                                        if (simulationCursor > pendingStepCursor) {
+                                            pendingStepCursor = new Date(simulationCursor);
+                                        }
+
+                                    } else {
+                                        // 3. Pending: Start at pendingStepCursor (which is now guaranteed to be after all active work)
+                                        let hoursRemaining = step.estimatedHours;
+                                        let totalHours = step.estimatedHours; // keep ref for part label check
+
+                                        // Calculate current day's usage based on clock time vs 8:30 start
+                                        let cursorTimeVal = pendingStepCursor.getHours() + pendingStepCursor.getMinutes()/60;
+                                        // Assume day starts at 8.5. Usage = current - 8.5.
+                                        let usedToday = Math.max(0, cursorTimeVal - 8.5); 
+                                        
+                                        // Safety check: If we are starting this new Pending step but cursor is already past end of shift, move next day
+                                        if (usedToday >= 8 - 0.01) {
+                                             pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
+                                             pendingStepCursor.setHours(8, 30, 0, 0);
+                                             usedToday = 0;
+                                        }
+
+                                        while (hoursRemaining > 0) {
+                                            // 1. Check if we need to advance day due to capacity (Strict 8H Limit)
+                                            if (usedToday >= 8 - 0.01) {
+                                                 pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
+                                                 pendingStepCursor.setHours(8, 30, 0, 0);
+                                                 usedToday = 0;
+                                            }
+
+                                            // 2. Fast forward to valid working slot (Holidays)
+                                            let safety = 0;
+                                            while (safety < 60) {
+                                                if (isWorkingDay(pendingStepCursor, rule)) {
+                                                    break;
+                                                }
+                                                // Skip holiday
+                                                pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
+                                                pendingStepCursor.setHours(8, 30, 0, 0);
+                                                usedToday = 0; // Reset usage for new day
+                                                safety++;
+                                            }
+
+                                            // 3. Calculate Allocation for this day
+                                            const capacity = 8 - usedToday;
+                                            const alloc = Math.min(hoursRemaining, capacity);
+                                            
+                                            // Only push if alloc > 0 to avoid empty blocks
+                                            if (alloc > 0.01) {
+                                                dailyAllocations.push({
+                                                    date: new Date(pendingStepCursor),
+                                                    step,
+                                                    status: 'PENDING',
+                                                    partLabel: totalHours > 8 || hoursRemaining < totalHours ? `(${alloc.toFixed(1)}h)` : ''
+                                                });
+                                            }
+
+                                            // 4. Advance state
+                                            hoursRemaining -= alloc;
+                                            usedToday += alloc;
+                                            pendingStepCursor.setTime(pendingStepCursor.getTime() + alloc * 3600 * 1000);
+                                        }
+                                        
+                                        // Force jump to next day to ensure visual clarity for pending steps
+                                        pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
+                                        pendingStepCursor.setHours(8, 30, 0, 0);
                                     }
                                 });
 
 
                                 // Group Steps by Week (Row)
-                                // We use dailyAllocations now
                                 const weeks: Record<string, typeof dailyAllocations> = {};
                                 dailyAllocations.forEach(alloc => {
                                     const d = new Date(alloc.date);

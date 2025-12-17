@@ -49,11 +49,19 @@
     </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;700;800;900&family=Share+Tech+Mono&display=swap');
-      body {
+      
+      /* Reset & Full Screen Mode for Scaled App */
+      body, html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #000000; /* Black bars for letterboxing */
+        overflow: hidden; /* Prevent native scrollbars, scrolling is handled inside the app container */
         font-family: "Microsoft YaHei", "Inter", sans-serif;
-        background-color: #050b14;
         color: #e2e8f0;
       }
+
       /* Custom Scrollbar for Cyber look */
       ::-webkit-scrollbar {
         width: 8px;

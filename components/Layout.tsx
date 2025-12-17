@@ -41,10 +41,10 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
   };
 
   return (
-    <div className="min-h-screen flex bg-cyber-bg text-cyber-text font-sans selection:bg-cyber-blue selection:text-black">
+    <div className="h-full w-full flex bg-cyber-bg text-cyber-text font-sans selection:bg-cyber-blue selection:text-black overflow-hidden">
       {/* Sidebar */}
       <aside 
-        className={`${isCollapsed ? 'w-20' : 'w-20 md:w-64'} bg-cyber-card border-r border-cyber-blue/20 flex flex-col shadow-2xl z-20 transition-all duration-300 relative`}
+        className={`${isCollapsed ? 'w-20' : 'w-20 md:w-64'} bg-cyber-card border-r border-cyber-blue/20 flex flex-col shadow-2xl z-20 transition-all duration-300 relative h-full`}
       >
         {/* Toggle Button */}
         <button 
@@ -55,7 +55,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
             {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
 
-        <div className={`h-24 flex items-center ${isCollapsed ? 'justify-center' : 'justify-center md:justify-start md:px-6'} border-b border-cyber-blue/20 transition-all duration-300 overflow-hidden`}>
+        <div className={`h-24 flex items-center ${isCollapsed ? 'justify-center' : 'justify-center md:justify-start md:px-6'} border-b border-cyber-blue/20 transition-all duration-300 overflow-hidden flex-shrink-0`}>
           <Cpu className="w-8 h-8 text-cyber-blue animate-pulse flex-shrink-0 shadow-neon-blue rounded-full" />
           
           <div className={`ml-3 transition-opacity duration-300 ${isCollapsed ? 'hidden' : 'hidden md:block'}`}>
@@ -156,7 +156,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
           )}
         </nav>
 
-        <div className={`p-4 border-t border-cyber-blue/20 text-xs text-cyber-muted transition-all duration-300 overflow-hidden ${isCollapsed ? 'hidden' : 'hidden md:block'} font-mono`}>
+        <div className={`p-4 border-t border-cyber-blue/20 text-xs text-cyber-muted transition-all duration-300 overflow-hidden flex-shrink-0 ${isCollapsed ? 'hidden' : 'hidden md:block'} font-mono`}>
           {/* Company Name */}
           <p className="text-white mb-2 tracking-wider text-sm uppercase whitespace-nowrap">
             大前机床(江苏)有限公司
@@ -189,7 +189,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
         
         {/* Collapsed Mode Footer Indicator (Dot only) */}
         {isCollapsed && (
-            <div className="py-4 flex flex-col items-center gap-4 border-t border-cyber-blue/20">
+            <div className="py-4 flex flex-col items-center gap-4 border-t border-cyber-blue/20 flex-shrink-0">
                 <div title={`系统状态: 在线`} className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_5px_#22c55e]"></div>
                 <div title={dbStatus === 'CONNECTED' ? '数据库: 已连接' : '数据库: 异常'} className={`w-2 h-2 rounded-full ${dbStatus === 'CONNECTED' ? 'bg-green-400' : 'bg-red-500'}`}></div>
             </div>
@@ -197,13 +197,13 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Decorative Grid Background */}
         <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
              style={{ backgroundImage: 'linear-gradient(rgba(0, 240, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 240, 255, 0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }}>
         </div>
 
-        <header className="h-28 bg-transparent flex items-start justify-between px-6 z-10 relative pt-2 pointer-events-none">
+        <header className="h-28 bg-transparent flex items-start justify-between px-6 z-10 relative pt-2 pointer-events-none flex-shrink-0">
           
           {/* Left Title Area */}
           <div className="w-1/6 pt-6 pointer-events-auto z-30 min-w-[200px]">

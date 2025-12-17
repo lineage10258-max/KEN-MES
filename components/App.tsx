@@ -5,7 +5,7 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Workstation } from './components/Workstation';
 import { AnomalyList } from './components/AnomalyList'; 
-import { ReportDownload } from './components/ReportDownload'; // Import new component
+import { ReportDownload } from './components/ReportDownload'; 
 import { ModelDatabase } from './components/ModelDatabase';
 import { OrderDatabase } from './components/OrderDatabase';
 import { HolidayDatabase } from './components/HolidayDatabase';
@@ -30,19 +30,46 @@ function App() {
   const [holidayRules, setHolidayRules] = useState<Record<HolidayType, HolidayRule>>(DEFAULT_HOLIDAY_RULES);
 
   // Sync/UI State
-  const [isLoading, setIsLoading] = useState<boolean>(false); // Changed default to false, load after login
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
   const [lastSync, setLastSync] = useState<Date>(new Date());
   const [lastSaveTime, setLastSaveTime] = useState<Date>(new Date());
   const [dbStatus, setDbStatus] = useState<'CONNECTING' | 'CONNECTED' | 'ERROR'>('CONNECTING');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
+  // Scaling State
+  const [scaleProps, setScaleProps] = useState({ scale: 1, x: 0, y: 0 });
+
+  // Handle Window Resize & Auto-Scale (1920x1080)
+  useEffect(() => {
+    const calculateScale = () => {
+      const targetWidth = 1920;
+      const targetHeight = 1080;
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+
+      // Calculate the scale to fit the window while maintaining aspect ratio
+      const scaleX = windowWidth / targetWidth;
+      const scaleY = windowHeight / targetHeight;
+      const scale = Math.min(scaleX, scaleY);
+
+      // Calculate position to center the scaled content
+      const x = (windowWidth - targetWidth * scale) / 2;
+      const y = (windowHeight - targetHeight * scale) / 2;
+
+      setScaleProps({ scale, x, y });
+    };
+
+    calculateScale(); // Initial calc
+    window.addEventListener('resize', calculateScale);
+    return () => window.removeEventListener('resize', calculateScale);
+  }, []);
+
   // Check for persisted login on mount
   useEffect(() => {
     const storedUser = localStorage.getItem('ken_mes_current_user');
     if (storedUser) {
       const user = JSON.parse(storedUser);
-      // Strictly use the stored permissions without auto-adding REPORT_DOWNLOAD overrides
       setCurrentUser(user);
     }
   }, []);
@@ -55,7 +82,6 @@ function App() {
       setIsLoading(true);
       setDbStatus('CONNECTING');
       try {
-        // Run fetches in parallel
         const [fetchedOrders, fetchedModels, fetchedHolidays] = await Promise.all([
             orderApi.fetchAll(),
             modelApi.fetchAll(),
@@ -64,8 +90,6 @@ function App() {
 
         setOrders(fetchedOrders);
         setModels(fetchedModels);
-        
-        // Merge fetched holidays with default structure to ensure all types exist
         setHolidayRules(prev => ({ ...prev, ...fetchedHolidays }));
 
         setLastSync(new Date());
@@ -85,22 +109,19 @@ function App() {
     }
   }, [currentUser, isDataLoaded]);
 
-  // Login Handler
   const handleLogin = (user: AppUser) => {
     setCurrentUser(user);
     localStorage.setItem('ken_mes_current_user', JSON.stringify(user));
     setCurrentView('DASHBOARD');
   };
 
-  // Logout Handler
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('ken_mes_current_user');
-    setIsDataLoaded(false); // Force reload on next login
+    setIsDataLoaded(false); 
   };
 
   // --- Order Actions ---
-
   const updateStepStatus = async (orderId: string, stepId: string, status: StepStatusEnum) => {
       const targetOrder = orders.find(o => o.id === orderId);
       if (!targetOrder) return;
@@ -108,7 +129,6 @@ function App() {
       const model = models.find(m => m.id === targetOrder.modelId);
       const stepInfo = model?.steps.find(s => s.id === stepId);
 
-      // 1. Update Step State
       const newStepStates = { ...targetOrder.stepStates };
       newStepStates[stepId] = {
           status: status,
@@ -117,7 +137,6 @@ function App() {
           operator: currentUser ? `${currentUser.name}` : 'Unknown'
       };
 
-      // 2. Update Logs
       const newLogs = [...(targetOrder.logs || [])];
       if (status === 'COMPLETED') {
            newLogs.push({
@@ -128,29 +147,20 @@ function App() {
            });
       }
 
-      // 3. Recalculate Metrics (Completed Count)
       const completedSteps = Object.values(newStepStates).filter((s: StepState) => s.status === 'COMPLETED').length;
       
-      // 4. Recalculate Estimated Completion Date (Dynamic Update to DB)
-      // This ensures the DB always has the "Real-time" projected date based on remaining work
       let newEstimatedDate = targetOrder.estimatedCompletionDate;
-      
       if (model) {
-          // Helper to get remaining hours based on the NEW state
           const getRemainingHoursForStep = (s: ProcessStep) => {
              const currentStatus = newStepStates[s.id]?.status;
-             // If completed, 0 hours remaining. If pending or in-progress, full hours (simplified logic)
              return currentStatus === 'COMPLETED' ? 0 : s.estimatedHours;
           };
 
           let remainingHours = 0;
-          
           if (model.scheduleCalculationModule) {
-              // Specific module rule
               const moduleSteps = model.steps.filter(s => s.parallelModule === model.scheduleCalculationModule);
               remainingHours = moduleSteps.reduce((acc, s) => acc + getRemainingHoursForStep(s), 0);
           } else {
-              // Longest parallel line rule
               const moduleRemaining: Record<string, number> = {};
               model.steps.forEach(s => {
                   const key = s.parallelModule || '通用';
@@ -159,8 +169,6 @@ function App() {
               });
               remainingHours = Math.max(0, ...Object.values(moduleRemaining));
           }
-          
-          // Project new date starting from NOW
           const now = new Date();
           newEstimatedDate = calculateProjectedDate(now, remainingHours, targetOrder.holidayType).toISOString();
       }
@@ -170,117 +178,59 @@ function App() {
           stepStates: newStepStates,
           logs: newLogs,
           currentStepIndex: completedSteps,
-          estimatedCompletionDate: newEstimatedDate // Save the recalculated date
+          estimatedCompletionDate: newEstimatedDate
       };
 
       setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-      
-      try {
-        await orderApi.update(updatedOrder);
-        setLastSync(new Date());
-        setLastSaveTime(new Date());
-      } catch (e) {
-        console.error("Update failed", e);
-      }
-    };
+      try { await orderApi.update(updatedOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e) { console.error("Update failed", e); }
+  };
 
   const updateStatus = async (orderId: string, status: MachineStatus) => {
     const targetOrder = orders.find(o => o.id === orderId);
     if (!targetOrder) return;
-
     const updatedOrder = { ...targetOrder, status };
-
     setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-    
-    try {
-        await orderApi.update(updatedOrder);
-        setLastSync(new Date());
-        setLastSaveTime(new Date());
-    } catch (e) {
-        console.error("Update status failed", e);
-    }
+    try { await orderApi.update(updatedOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e) { console.error("Update status failed", e); }
   }
 
   const handleAddAnomaly = async (orderId: string, anomaly: AnomalyRecord) => {
-      // Optimistically update UI
       const targetOrder = orders.find(o => o.id === orderId);
       if (!targetOrder) return;
-
       const newAnomalies = [...(targetOrder.anomalies || []), anomaly];
       const updatedOrder = { ...targetOrder, anomalies: newAnomalies };
       setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-      
-      try {
-        // Save to new table
-        await orderApi.createAnomaly(orderId, anomaly);
-        setLastSync(new Date());
-        setLastSaveTime(new Date());
-      } catch (e: any) {
+      try { await orderApi.createAnomaly(orderId, anomaly); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
         console.error("Add anomaly failed", e);
-        // Rollback on failure
         setOrders(prev => prev.map(o => o.id === orderId ? targetOrder : o));
-        // Display specific error message from Supabase (e.g., RLS policy violation)
         const errMsg = e.message || JSON.stringify(e);
         alert(`保存异常记录失败: ${errMsg}\n\n请检查数据库 RLS 权限设置。`);
       }
   };
 
   const handleUpdateAnomaly = async (updatedAnomaly: AnomalyRecord, orderId: string) => {
-      // Optimistically update
       setOrders(prev => prev.map(order => {
           if (order.id === orderId && order.anomalies) {
-              return {
-                  ...order,
-                  anomalies: order.anomalies.map(a => a.id === updatedAnomaly.id ? updatedAnomaly : a)
-              };
+              return { ...order, anomalies: order.anomalies.map(a => a.id === updatedAnomaly.id ? updatedAnomaly : a) };
           }
           return order;
       }));
-
-      try {
-          await orderApi.updateAnomaly(updatedAnomaly);
-          setLastSync(new Date());
-          setLastSaveTime(new Date());
-      } catch (e: any) {
-          console.error("Update anomaly failed", e);
-          alert(`更新异常失败: ${e.message}`);
-          // Should potentially rollback here by refetching
-      }
+      try { await orderApi.updateAnomaly(updatedAnomaly); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`更新异常失败: ${e.message}`); }
   };
 
   const handleDeleteAnomaly = async (anomalyId: string, orderId: string) => {
       if(!confirm("确定要删除这条异常记录吗？")) return;
-
-      // Optimistically delete
       setOrders(prev => prev.map(order => {
           if (order.id === orderId && order.anomalies) {
-              return {
-                  ...order,
-                  anomalies: order.anomalies.filter(a => a.id !== anomalyId)
-              };
+              return { ...order, anomalies: order.anomalies.filter(a => a.id !== anomalyId) };
           }
           return order;
       }));
-
-      try {
-          await orderApi.deleteAnomaly(anomalyId);
-          setLastSync(new Date());
-          setLastSaveTime(new Date());
-      } catch (e: any) {
-          console.error("Delete anomaly failed", e);
-          alert(`删除异常失败: ${e.message}`);
-          // Should potentially rollback
-      }
+      try { await orderApi.deleteAnomaly(anomalyId); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`删除异常失败: ${e.message}`); }
   };
 
   const handleAddOrder = async (newOrder: WorkOrder) => {
     setOrders(prev => [newOrder, ...prev]); 
-    try {
-      await orderApi.create(newOrder);
-      setLastSync(new Date());
-      setLastSaveTime(new Date());
-    } catch (e: any) {
-      console.error("Failed to create order", e);
+    try { await orderApi.create(newOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
       setOrders(prev => prev.filter(o => o.id !== newOrder.id));
       alert(`创建失败: ${e.message}\n详情: ${e.details || '无详细信息'}`);
     }
@@ -289,12 +239,7 @@ function App() {
   const handleUpdateOrder = async (updatedOrder: WorkOrder, originalId?: string) => {
     const targetId = originalId || updatedOrder.id;
     setOrders(prev => prev.map(o => o.id === targetId ? updatedOrder : o));
-    try {
-      await orderApi.update(updatedOrder, originalId);
-      setLastSync(new Date());
-      setLastSaveTime(new Date());
-    } catch (e: any) {
-      console.error("Failed to update order", e);
+    try { await orderApi.update(updatedOrder, originalId); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
       alert(`更新失败: ${e.message}\n详情: ${e.details || '无详细信息'}`);
     }
   };
@@ -303,46 +248,25 @@ function App() {
     if (confirm(`确定要删除机台 ${id} 的所有生产数据吗？此操作不可恢复。`)) {
       const prevOrders = [...orders];
       setOrders(prev => prev.filter(o => o.id !== id));
-      try {
-        await orderApi.delete(id);
-        setLastSync(new Date());
-        setLastSaveTime(new Date());
-      } catch (e: any) {
-        console.error("Failed to delete order", e);
+      try { await orderApi.delete(id); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
         setOrders(prevOrders); 
         alert(`删除失败: ${e.message}\n详情: ${e.details || '无详细信息'}`);
       }
     }
   };
 
-  // --- Model Actions ---
-
   const handleAddModel = async (newModel: MachineModel) => {
     setModels(prev => [...prev, newModel]);
-    try {
-      await modelApi.create(newModel);
-      setLastSync(new Date());
-      setLastSaveTime(new Date());
-    } catch (e: any) {
-        console.error("Failed to create model", e);
-        setModels(prev => prev.filter(m => m.id !== newModel.id)); // Rollback optimistic update
-        const errMsg = e.message || JSON.stringify(e);
-        alert(`创建工艺失败: ${errMsg}`);
-        throw e; // Throw so component knows it failed
+    try { await modelApi.create(newModel); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
+        setModels(prev => prev.filter(m => m.id !== newModel.id)); 
+        alert(`创建工艺失败: ${e.message}`); throw e; 
     }
   };
 
   const handleUpdateModel = async (updatedModel: MachineModel) => {
     setModels(prev => prev.map(m => m.id === updatedModel.id ? updatedModel : m));
-    try {
-        await modelApi.update(updatedModel);
-        setLastSync(new Date());
-        setLastSaveTime(new Date());
-    } catch (e: any) {
-        console.error("Failed to update model", e);
-        const errMsg = e.message || JSON.stringify(e);
-        alert(`更新工艺失败: ${errMsg}`);
-        throw e; // Throw so component knows it failed
+    try { await modelApi.update(updatedModel); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
+        alert(`更新工艺失败: ${e.message}`); throw e;
     }
   };
 
@@ -350,46 +274,23 @@ function App() {
     if(confirm('确定删除此工艺模型吗？')) {
         const prevModels = [...models];
         setModels(prev => prev.filter(m => m.id !== id));
-        try {
-            await modelApi.delete(id);
-            setLastSync(new Date());
-            setLastSaveTime(new Date());
-        } catch (e: any) {
-            console.error("Failed to delete model", e);
-            setModels(prevModels);
-            alert(`删除失败: ${e.message}`);
+        try { await modelApi.delete(id); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
+            setModels(prevModels); alert(`删除失败: ${e.message}`);
         }
     }
   };
 
-  // --- Holiday Actions ---
-
   const handleUpdateHolidayRule = async (updatedRule: HolidayRule) => {
-      setHolidayRules(prev => ({
-          ...prev,
-          [updatedRule.type]: updatedRule
-      }));
-
-      try {
-          await holidayApi.update(updatedRule);
-          setLastSync(new Date());
-          setLastSaveTime(new Date());
-      } catch (e: any) {
-          console.error("Failed to update holiday rule", e);
-          alert(`假日更新失败: ${e.message}`);
-      }
+      setHolidayRules(prev => ({ ...prev, [updatedRule.type]: updatedRule }));
+      try { await holidayApi.update(updatedRule); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`假日更新失败: ${e.message}`); }
   };
 
   // --- Render Logic ---
-
-  if (!currentUser) {
-      return <LoginScreen onLoginSuccess={handleLogin} />;
-  }
-
-  // Check permission helper
-  const canAccess = (view: View) => currentUser.allowedViews?.includes(view);
+  const canAccess = (view: View) => currentUser?.allowedViews?.includes(view);
 
   const renderContent = () => {
+    if (!currentUser) return <LoginScreen onLoginSuccess={handleLogin} />;
+
     if (isLoading) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-cyber-blue animate-pulse">
@@ -400,8 +301,6 @@ function App() {
       );
     }
 
-    // Role/Permission Protection Logic
-    // FIXED: Strictly respect canAccess without exceptions
     if (!canAccess(currentView)) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-center">
@@ -410,10 +309,7 @@ function App() {
                  </div>
                  <h2 className="text-xl font-bold text-white mb-2">访问被拒绝</h2>
                  <p className="text-cyber-muted">您没有权限访问此页面。</p>
-                 <button 
-                    onClick={() => setCurrentView('DASHBOARD')}
-                    className="mt-6 text-cyber-blue hover:text-white underline text-sm"
-                 >
+                 <button onClick={() => setCurrentView('DASHBOARD')} className="mt-6 text-cyber-blue hover:text-white underline text-sm">
                      返回首页
                  </button>
             </div>
@@ -421,70 +317,26 @@ function App() {
     }
 
     switch (currentView) {
-      case 'DASHBOARD':
-        return <Dashboard orders={orders} models={models} />;
-      case 'WORKSTATION':
-        return (
-          <Workstation 
-            orders={orders} 
-            models={models} 
-            onUpdateStepStatus={updateStepStatus}
-            onStatusChange={updateStatus}
-            onAddAnomaly={handleAddAnomaly}
-          />
-        );
-      case 'ANOMALY_LIST':
-        return (
-          <AnomalyList 
-            orders={orders} 
-            models={models} 
-            onUpdateAnomaly={handleUpdateAnomaly}
-            onDeleteAnomaly={handleDeleteAnomaly}
-          />
-        );
-      case 'REPORT_DOWNLOAD':
-        return <ReportDownload orders={orders} models={models} />;
-      case 'ORDER_DB':
-        return (
-            <OrderDatabase 
-                orders={orders} 
-                models={models} 
-                onAddOrder={handleAddOrder}
-                onUpdateOrder={handleUpdateOrder}
-                onDeleteOrder={handleDeleteOrder}
-            />
-        );
-      case 'MODEL_DB':
-        return (
-            <ModelDatabase 
-                models={models} 
-                onAddModel={handleAddModel}
-                onUpdateModel={handleUpdateModel}
-                onDeleteModel={handleDeleteModel}
-            />
-        );
-      case 'HOLIDAY_DB':
-        return (
-            <HolidayDatabase 
-                rules={holidayRules}
-                onUpdateRule={handleUpdateHolidayRule}
-            />
-        );
-      case 'USER_DB':
-        return <UserDatabase />;
-      default:
-        return <Dashboard orders={orders} models={models} />;
+      case 'DASHBOARD': return <Dashboard orders={orders} models={models} />;
+      case 'WORKSTATION': return <Workstation orders={orders} models={models} holidayRules={holidayRules} onUpdateStepStatus={updateStepStatus} onStatusChange={updateStatus} onAddAnomaly={handleAddAnomaly} />;
+      case 'ANOMALY_LIST': return <AnomalyList orders={orders} models={models} onUpdateAnomaly={handleUpdateAnomaly} onDeleteAnomaly={handleDeleteAnomaly} />;
+      case 'REPORT_DOWNLOAD': return <ReportDownload orders={orders} models={models} />;
+      case 'ORDER_DB': return <OrderDatabase orders={orders} models={models} onAddOrder={handleAddOrder} onUpdateOrder={handleUpdateOrder} onDeleteOrder={handleDeleteOrder} />;
+      case 'MODEL_DB': return <ModelDatabase models={models} onAddModel={handleAddModel} onUpdateModel={handleUpdateModel} onDeleteModel={handleDeleteModel} />;
+      case 'HOLIDAY_DB': return <HolidayDatabase rules={holidayRules} onUpdateRule={handleUpdateHolidayRule} />;
+      case 'USER_DB': return <UserDatabase />;
+      default: return <Dashboard orders={orders} models={models} />;
     }
   };
 
-  return (
+  const appContent = (
     <Layout 
       currentView={currentView} 
       onNavigate={setCurrentView}
       lastSync={lastSync}
       lastSaveTime={lastSaveTime}
       dbStatus={dbStatus === 'ERROR' ? 'ERROR' : dbStatus}
-      currentUser={currentUser}
+      currentUser={currentUser!}
       onLogout={handleLogout}
     >
       {dbStatus === 'ERROR' && errorMessage && (
@@ -494,6 +346,31 @@ function App() {
       )}
       {renderContent()}
     </Layout>
+  );
+
+  return (
+    <div style={{
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: '#000',
+      overflow: 'hidden',
+      position: 'relative'
+    }}>
+      <div style={{
+        width: '1920px',
+        height: '1080px',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        transform: `translate(${scaleProps.x}px, ${scaleProps.y}px) scale(${scaleProps.scale})`,
+        transformOrigin: 'top left',
+        backgroundColor: '#050b14', // Match the app background
+        boxShadow: '0 0 50px rgba(0,0,0,0.8)', // Shadow to separate from letterboxing
+        overflow: 'hidden'
+      }}>
+        {!currentUser ? <LoginScreen onLoginSuccess={handleLogin} /> : appContent}
+      </div>
+    </div>
   );
 }
 
