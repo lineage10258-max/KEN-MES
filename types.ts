@@ -1,5 +1,4 @@
 
-
 export enum MachineStatus {
   PLANNED = 'PLANNED',
   IN_PROGRESS = 'IN_PROGRESS',
@@ -7,7 +6,7 @@ export enum MachineStatus {
   COMPLETED = 'COMPLETED',
 }
 
-export type StepStatusEnum = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+export type StepStatusEnum = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
 
 export type HolidayType = 'SINGLE' | 'DOUBLE' | 'ALTERNATE' | 'NONE';
 

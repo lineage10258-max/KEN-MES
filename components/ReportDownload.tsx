@@ -45,7 +45,8 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       // 1. Calculate remaining hours
       let remainingHours = 0;
       const getRemainingHoursForStep = (s: ProcessStep) => {
-          const isCompleted = order.stepStates?.[s.id]?.status === 'COMPLETED';
+          const status = order.stepStates?.[s.id]?.status;
+          const isCompleted = status === 'COMPLETED' || status === 'SKIPPED';
           return isCompleted ? 0 : s.estimatedHours;
       };
 
@@ -66,11 +67,15 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       const now = new Date();
       const projected = calculateProjectedDate(now, remainingHours, order.holidayType || 'DOUBLE');
 
-      // 3. Variance
+      // 3. Variance (Normalize to midnight)
       let variance = 0;
       if (order.businessClosingDate) {
+          const p = new Date(projected);
+          p.setHours(0,0,0,0);
           const closing = new Date(order.businessClosingDate);
-          const diff = projected.getTime() - closing.getTime();
+          closing.setHours(0,0,0,0);
+          
+          const diff = p.getTime() - closing.getTime();
           variance = Math.ceil(diff / (1000 * 60 * 60 * 24));
       }
 
@@ -111,8 +116,12 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
           const activeModuleDetails: string[] = [];
           
           Object.entries(moduleGroups).forEach(([modName, steps]) => {
-              // Hide if fully complete
-              const isModuleComplete = steps.every(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
+              // Hide if fully complete (either COMPLETED or SKIPPED)
+              const isModuleComplete = steps.every(s => {
+                  const status = o.stepStates?.[s.id]?.status;
+                  return status === 'COMPLETED' || status === 'SKIPPED';
+              });
+              
               if (isModuleComplete) return;
 
               // Find logic
@@ -120,7 +129,12 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
               let statusSuffix = '(进行中)';
 
               if (!targetStep) {
-                  const completedSteps = steps.filter(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
+                  // Find last completed or skipped
+                  const completedSteps = steps.filter(s => {
+                      const st = o.stepStates?.[s.id]?.status;
+                      return st === 'COMPLETED' || st === 'SKIPPED';
+                  });
+                  
                   if (completedSteps.length > 0) {
                       targetStep = completedSteps[completedSteps.length - 1];
                       statusSuffix = '(近期完工)';
@@ -266,14 +280,20 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
           const activeModuleDetails: string[] = [];
           
           Object.entries(moduleGroups).forEach(([modName, steps]) => {
-              const isModuleComplete = steps.every(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
+              const isModuleComplete = steps.every(s => {
+                  const st = o.stepStates?.[s.id]?.status;
+                  return st === 'COMPLETED' || st === 'SKIPPED';
+              });
               if (isModuleComplete) return;
 
               let targetStep = steps.find(s => o.stepStates?.[s.id]?.status === 'IN_PROGRESS');
               let statusSuffix = ' (进行中)';
 
               if (!targetStep) {
-                  const completedSteps = steps.filter(s => o.stepStates?.[s.id]?.status === 'COMPLETED');
+                  const completedSteps = steps.filter(s => {
+                      const st = o.stepStates?.[s.id]?.status;
+                      return st === 'COMPLETED' || st === 'SKIPPED';
+                  });
                   if (completedSteps.length > 0) {
                       targetStep = completedSteps[completedSteps.length - 1];
                       statusSuffix = ' (近期完工)';

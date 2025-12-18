@@ -133,7 +133,7 @@ function App() {
       newStepStates[stepId] = {
           status: status,
           startTime: status === 'IN_PROGRESS' ? new Date().toISOString() : newStepStates[stepId]?.startTime,
-          endTime: status === 'COMPLETED' ? new Date().toISOString() : undefined,
+          endTime: (status === 'COMPLETED' || status === 'SKIPPED') ? new Date().toISOString() : undefined,
           operator: currentUser ? `${currentUser.name}` : 'Unknown'
       };
 
@@ -145,15 +145,25 @@ function App() {
                completedBy: currentUser ? currentUser.name : 'Unknown',
                notes: `工序完成: ${stepInfo?.name || stepId}`
            });
+      } else if (status === 'SKIPPED') {
+           newLogs.push({
+               stepId,
+               completedAt: new Date().toISOString(),
+               completedBy: currentUser ? currentUser.name : 'Unknown',
+               notes: `工序忽略: ${stepInfo?.name || stepId}`
+           });
       }
 
-      const completedSteps = Object.values(newStepStates).filter((s: StepState) => s.status === 'COMPLETED').length;
+      // Count COMPLETED and SKIPPED as progress
+      const completedSteps = Object.values(newStepStates).filter((s: StepState) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
       
       let newEstimatedDate = targetOrder.estimatedCompletionDate;
       if (model) {
           const getRemainingHoursForStep = (s: ProcessStep) => {
              const currentStatus = newStepStates[s.id]?.status;
-             return currentStatus === 'COMPLETED' ? 0 : s.estimatedHours;
+             // If COMPLETED or SKIPPED, remaining hours = 0
+             const isDone = currentStatus === 'COMPLETED' || currentStatus === 'SKIPPED';
+             return isDone ? 0 : s.estimatedHours;
           };
 
           let remainingHours = 0;
@@ -182,15 +192,35 @@ function App() {
       };
 
       setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-      try { await orderApi.update(updatedOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e) { console.error("Update failed", e); }
+      
+      try { 
+        await orderApi.update(updatedOrder); 
+        setLastSync(new Date()); 
+        setLastSaveTime(new Date()); 
+      } catch (e: any) { 
+        console.error("Update failed", e);
+        // Rollback on failure
+        setOrders(prev => prev.map(o => o.id === orderId ? targetOrder : o));
+        alert(`更新失败: ${e.message || '未知错误，请检查网络或数据库连接'}`);
+      }
   };
 
   const updateStatus = async (orderId: string, status: MachineStatus) => {
     const targetOrder = orders.find(o => o.id === orderId);
     if (!targetOrder) return;
     const updatedOrder = { ...targetOrder, status };
+    
     setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-    try { await orderApi.update(updatedOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e) { console.error("Update status failed", e); }
+    
+    try { 
+        await orderApi.update(updatedOrder); 
+        setLastSync(new Date()); 
+        setLastSaveTime(new Date()); 
+    } catch (e: any) { 
+        console.error("Update status failed", e);
+        setOrders(prev => prev.map(o => o.id === orderId ? targetOrder : o));
+        alert(`状态更新失败: ${e.message}`);
+    }
   }
 
   const handleAddAnomaly = async (orderId: string, anomaly: AnomalyRecord) => {

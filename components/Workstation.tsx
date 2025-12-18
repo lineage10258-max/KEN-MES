@@ -2,12 +2,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepStatusEnum, StepState, AnomalyRecord, HolidayRule, HolidayType } from '../types';
 import { calculateProjectedDate, isWorkingDay, DEFAULT_HOLIDAY_RULES } from '../services/holidayService';
-import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table } from 'lucide-react';
+import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table, Ban } from 'lucide-react';
 
 interface WorkstationProps {
   orders: WorkOrder[];
   models: MachineModel[];
-  holidayRules?: Record<HolidayType, HolidayRule>; // Added prop
+  holidayRules?: Record<HolidayType, HolidayRule>; 
   onUpdateStepStatus: (orderId: string, stepId: string, status: StepStatusEnum) => void;
   onStatusChange: (orderId: string, status: MachineStatus) => void;
   onAddAnomaly: (orderId: string, anomaly: AnomalyRecord) => void;
@@ -21,7 +21,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   
   // Anomaly Modal State
   const [showAnomalyModal, setShowAnomalyModal] = useState(false);
-  const [stepSearchTerm, setStepSearchTerm] = useState(''); // New state for searching steps
+  const [stepSearchTerm, setStepSearchTerm] = useState(''); 
   const [newAnomaly, setNewAnomaly] = useState<{
       stepName: string;
       reason: string;
@@ -38,8 +38,9 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       durationDays: '0'
   });
   
-  // Collapsed State for Parallel Modules
-  const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
+  // Logic Change: Use expandedModules to default to collapsed (false)
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  
   // New Collapsed State for Anomalies
   const [isAnomaliesCollapsed, setIsAnomaliesCollapsed] = useState(false);
 
@@ -58,7 +59,6 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       return matchWorkshop && matchStatus;
   }).sort((a, b) => {
       // Sort by Business Closing Date (Ascending)
-      // If businessClosingDate is missing, put it at the end (MAX_SAFE_INTEGER)
       const dateA = a.businessClosingDate ? new Date(a.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
       const dateB = b.businessClosingDate ? new Date(b.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
       
@@ -88,8 +88,6 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
           groups[pMod].push({ ...step, index });
       });
       
-      // Sort keys based on the number of steps in each group (ascending)
-      // If counts are equal, fallback to alphabetical for stability
       const sortedKeys = Object.keys(groups).sort((a, b) => {
           const diff = groups[a].length - groups[b].length;
           if (diff !== 0) return diff;
@@ -112,8 +110,10 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       // 1. Calculate remaining hours based on uncompleted steps
       let remainingHours = 0;
       const getRemainingHoursForStep = (s: ProcessStep) => {
-          const isCompleted = order.stepStates?.[s.id]?.status === 'COMPLETED';
-          return isCompleted ? 0 : s.estimatedHours;
+          const status = order.stepStates?.[s.id]?.status;
+          // IGNORED/SKIPPED steps also count as done (0 hours remaining)
+          const isDone = status === 'COMPLETED' || status === 'SKIPPED';
+          return isDone ? 0 : s.estimatedHours;
       };
 
       if (model.scheduleCalculationModule) {
@@ -134,11 +134,16 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       const holidayType = order.holidayType || 'DOUBLE';
       const projected = calculateProjectedDate(now, remainingHours, holidayType);
 
-      // 3. Variance
+      // 3. Variance (Normalize to midnight for accurate day diff)
       const closing = order.businessClosingDate ? new Date(order.businessClosingDate) : null;
       let variance = 0;
       if (closing) {
-          const diff = projected.getTime() - closing.getTime();
+          const p = new Date(projected);
+          p.setHours(0,0,0,0);
+          const c = new Date(closing);
+          c.setHours(0,0,0,0);
+          
+          const diff = p.getTime() - c.getTime();
           variance = Math.ceil(diff / (1000 * 60 * 60 * 24));
       }
 
@@ -168,13 +173,13 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   }
 
   const toggleModule = (modName: string) => {
-    setCollapsedModules(prev => ({
+    setExpandedModules(prev => ({
         ...prev,
         [modName]: !prev[modName]
     }));
   };
   
-  // Anomaly Logic - Updated for 8:30-17:30 working hours logic
+  // Anomaly Logic
   const calculateDuration = () => {
       if (newAnomaly.startTime && newAnomaly.endTime) {
           const start = new Date(newAnomaly.startTime);
@@ -185,16 +190,14 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
               return;
           }
 
-          // Constants for the workday (8:30 to 17:30)
           const WORK_START_HOUR = 8;
           const WORK_START_MIN = 30;
           const WORK_END_HOUR = 17;
           const WORK_END_MIN = 30;
-          const HOURS_PER_DAY = 9; // 8:30 to 17:30 is 9 hours
+          const HOURS_PER_DAY = 9; 
 
           let totalMilliseconds = 0;
           
-          // Iterate through each day involved
           const current = new Date(start);
           current.setHours(0,0,0,0);
           
@@ -202,31 +205,25 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
           endDateMidnight.setHours(0,0,0,0);
 
           while (current <= endDateMidnight) {
-              // Define the shift window for the current day iteration
               const shiftStart = new Date(current);
               shiftStart.setHours(WORK_START_HOUR, WORK_START_MIN, 0, 0);
 
               const shiftEnd = new Date(current);
               shiftEnd.setHours(WORK_END_HOUR, WORK_END_MIN, 0, 0);
 
-              // Calculate overlap between (start, end) and (shiftStart, shiftEnd)
-              // Overlap Start = Max(start, shiftStart)
               const overlapStart = start > shiftStart ? start : shiftStart;
-              // Overlap End = Min(end, shiftEnd)
               const overlapEnd = end < shiftEnd ? end : shiftEnd;
 
               if (overlapStart < overlapEnd) {
                   totalMilliseconds += overlapEnd.getTime() - overlapStart.getTime();
               }
 
-              // Move to next day
               current.setDate(current.getDate() + 1);
           }
 
           const totalHours = totalMilliseconds / (1000 * 60 * 60);
           const totalDays = totalHours / HOURS_PER_DAY;
           
-          // Format to max 1 decimal place (e.g., 1.5, 1, 0.5)
           const formattedDays = parseFloat(totalDays.toFixed(1)).toString();
 
           setNewAnomaly(prev => ({ ...prev, durationDays: formattedDays }));
@@ -239,7 +236,6 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       calculateDuration();
   }, [newAnomaly.startTime, newAnomaly.endTime]);
 
-  // Helper to format local date time for input (YYYY-MM-DDTHH:mm)
   const getDefaultTimeStr = (hour: number, minute: number) => {
     const now = new Date();
     now.setHours(hour, minute, 0, 0);
@@ -256,7 +252,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
         endTime: getDefaultTimeStr(17, 30),
         durationDays: '0'
     });
-    setStepSearchTerm(''); // Reset search term
+    setStepSearchTerm('');
     setShowAnomalyModal(true);
   };
 
@@ -291,7 +287,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
 
 
   // Stats for the selected order
-  const completedStepsCount = selectedOrder ? Object.values(selectedOrder.stepStates || {}).filter((s: StepState) => s.status === 'COMPLETED').length : 0;
+  const completedStepsCount = selectedOrder ? Object.values(selectedOrder.stepStates || {}).filter((s: StepState) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length : 0;
   const totalSteps = selectedModel?.steps.length || 1;
   const progressPercentage = Math.round((completedStepsCount / totalSteps) * 100);
 
@@ -304,7 +300,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
         projectedDate: m.projectedDate,
         closingDate: m.closingDate,
         varianceDays: m.variance,
-        materialRate: '60%' // Hardcoded for now
+        materialRate: '60%' 
     };
   }, [selectedOrder, models]);
 
@@ -348,6 +344,8 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                const status = selectedOrder.stepStates?.[selectedStep.id]?.status || 'PENDING';
                                if (status === 'COMPLETED') {
                                    return <div className="text-green-400 font-bold border border-green-500/30 bg-green-500/10 p-3 text-center flex items-center justify-center gap-2"><CheckCircle/> 已完工</div>
+                               } else if (status === 'SKIPPED') {
+                                   return <div className="text-cyber-orange font-bold border border-cyber-orange/30 bg-cyber-orange/10 p-3 text-center flex items-center justify-center gap-2 opacity-80"><Ban size={18}/> ⛔ 已忽略</div>
                                } else if (status === 'IN_PROGRESS') {
                                    return <div className="text-cyber-blue font-bold border border-cyber-blue/30 bg-cyber-blue/10 p-3 text-center flex items-center justify-center gap-2 animate-pulse"><Activity/> 正在进行中...</div>
                                } else {
@@ -359,12 +357,22 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                        {/* Action Buttons */}
                        <div className="flex gap-4">
                            {(!selectedOrder.stepStates?.[selectedStep.id] || selectedOrder.stepStates?.[selectedStep.id]?.status === 'PENDING') && (
-                               <button 
-                                   onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')}
-                                   className="flex-1 bg-cyber-blue hover:bg-white text-black font-bold py-3 px-4 shadow-neon-blue transition-all flex items-center justify-center gap-2"
-                               >
-                                   <Play size={18} fill="currentColor" /> 开始作业
-                               </button>
+                               <>
+                                   <button 
+                                       onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')}
+                                       className="flex-1 bg-cyber-blue hover:bg-white text-black font-bold py-3 px-4 shadow-neon-blue transition-all flex items-center justify-center gap-2"
+                                   >
+                                       <Play size={18} fill="currentColor" /> 开始作业
+                                   </button>
+                                   
+                                   <button 
+                                       onClick={() => handleUpdateCurrentStepStatus('SKIPPED')}
+                                       className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:bg-cyber-muted hover:text-white font-bold py-3 px-4 transition-all flex items-center justify-center gap-2"
+                                       title="忽略此作业，将剩余工时设为0以满足出货需求"
+                                   >
+                                       <Ban size={18} /> 忽略作业
+                                   </button>
+                               </>
                            )}
 
                            {selectedOrder.stepStates?.[selectedStep.id]?.status === 'IN_PROGRESS' && (
@@ -384,7 +392,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                 </>
                            )}
 
-                           {selectedOrder.stepStates?.[selectedStep.id]?.status === 'COMPLETED' && (
+                           {(selectedOrder.stepStates?.[selectedStep.id]?.status === 'COMPLETED' || selectedOrder.stepStates?.[selectedStep.id]?.status === 'SKIPPED') && (
                                 <button 
                                    onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')}
                                    className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:text-white hover:border-white py-3 px-4 transition-all"
@@ -545,7 +553,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                 {[
                     { key: 'ALL', label: '全部' },
                     { key: MachineStatus.IN_PROGRESS, label: '进行中' },
-                    { key: MachineStatus.PLANNED, label: '排队中' },
+                    { key: MachineStatus.PLANNED, label: '排隊中' },
                     { key: MachineStatus.COMPLETED, label: '已完成' },
                 ].map((status) => (
                     <button
@@ -619,18 +627,16 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                         <div className="flex items-center gap-2 justify-end">
                                             {/* Metrics Boxes - Enlarged and Right Aligned */}
                                             <div className="flex gap-1 justify-end">
-                                                {/* Variance Box */}
-                                                {variance !== 0 && (
-                                                    <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${
-                                                        variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'
-                                                    }`}>
-                                                        <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span>
-                                                        <div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
-                                                            {variance > 0 && <AlertTriangle size={8}/>}
-                                                            {variance > 0 ? `+${variance}` : variance}
-                                                        </div>
+                                                {/* Variance Box - ALWAYS SHOW, EVEN IF 0 */}
+                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${
+                                                    variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'
+                                                }`}>
+                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span>
+                                                    <div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
+                                                        {variance > 0 && <AlertTriangle size={8}/>}
+                                                        {variance > 0 ? `+${variance}` : variance}
                                                     </div>
-                                                )}
+                                                </div>
                                                 
                                                 {/* Planned Box (Dynamic) */}
                                                 <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
@@ -658,7 +664,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                                 'border-green-500/40 text-green-500'
                                             }`}>
                                                 {order.status === MachineStatus.IN_PROGRESS ? '进行中' : 
-                                                order.status === MachineStatus.PLANNED ? '排队中' : '完成'}
+                                                order.status === MachineStatus.PLANNED ? '排隊中' : '完成'}
                                             </span>
                                         </div>
                                     </div>
@@ -692,7 +698,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                  {/* New Anomaly Button */}
                                  <button 
                                     onClick={handleOpenAnomalyModal}
-                                    className="ml-2 bg-cyber-orange/10 border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black px-3 py-1 text-xs font-bold uppercase tracking-wider rounded flex items-center gap-1 transition-all shadow-neon-orange"
+                                    className="ml-2 bg-cyber-orange/10 border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded flex items-center gap-1 transition-all shadow-neon-orange"
                                  >
                                      <Plus size={12}/> 新增异常
                                  </button>
@@ -720,7 +726,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
 
                                 {/* Card 2: Variance Days */}
                                 <div className={`bg-cyber-card/80 border p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-sm ${
-                                    dateMetrics.varianceDays > 0 ? 'border-cyber-orange/40 bg-cyber-orange/5' : 'border-green-500/40 bg-green-500/5'
+                                    dateMetrics.varianceDays > 0 ? 'border-cyber-orange/40 bg-cyber-orange/5' : 'border-green-500/40 bg-green-500/10'
                                 }`}>
                                     <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">差异天数</span>
                                     <div className={`flex items-center gap-1 text-sm font-bold drop-shadow-md ${
@@ -829,19 +835,31 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                             {/* Render Parallel Modules */}
                             {Object.entries(groupedSteps).map(([parallelMod, steps]) => {
                                 // Count active/completed in this module
-                                const moduleCompleted = steps.filter(s => selectedOrder.stepStates?.[s.id]?.status === 'COMPLETED').length;
+                                const moduleCompleted = steps.filter(s => selectedOrder.stepStates?.[s.id]?.status === 'COMPLETED' || selectedOrder.stepStates?.[s.id]?.status === 'SKIPPED').length;
                                 const moduleActive = steps.filter(s => selectedOrder.stepStates?.[s.id]?.status === 'IN_PROGRESS').length;
-                                const isCollapsed = collapsedModules[parallelMod];
+                                
+                                // LOGIC CHANGE: Use expandedModules to default to collapsed (false). Open only if true.
+                                const isExpanded = !!expandedModules[parallelMod]; 
+                                
                                 const isModuleFullyComplete = steps.length > 0 && moduleCompleted === steps.length;
                                 
                                 // --- UPDATED Schedule Expansion Logic ---
+                                const now = new Date();
+                                // EFFECTIVE NOW: If past 21:00, jump to tomorrow morning
+                                let effectiveNow = new Date(now);
+                                if (now.getHours() >= 21) {
+                                    effectiveNow.setDate(now.getDate() + 1);
+                                    effectiveNow.setHours(8, 30, 0, 0);
+                                } else if (now.getHours() < 8 || (now.getHours() === 8 && now.getMinutes() < 30)) {
+                                    effectiveNow.setHours(8, 30, 0, 0);
+                                }
+
                                 let pendingStepCursor = selectedOrder.startDate ? new Date(selectedOrder.startDate) : new Date();
                                 // Ensure start at 8:30 if it's earlier
                                 if (pendingStepCursor.getHours() < 8 || (pendingStepCursor.getHours() === 8 && pendingStepCursor.getMinutes() < 30)) {
                                     pendingStepCursor.setHours(8, 30, 0, 0);
                                 }
 
-                                // Helper: Get the active rule object from the passed prop (defaulting to double if missing)
                                 const rule = holidayRules[selectedOrder.holidayType] || DEFAULT_HOLIDAY_RULES['DOUBLE'];
 
                                 const dailyAllocations: Array<{
@@ -854,25 +872,22 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                 steps.forEach(step => {
                                     const stepState = selectedOrder.stepStates?.[step.id] || { status: 'PENDING' };
                                     
-                                    if (stepState.status === 'COMPLETED' && stepState.endTime) {
-                                        // 1. Completed: Anchor to Actual End Time
-                                        const endTime = new Date(stepState.endTime);
+                                    // Treat SKIPPED same as COMPLETED, ensure we have a date
+                                    if (stepState.status === 'COMPLETED' || stepState.status === 'SKIPPED') {
+                                        // Use endTime if available, otherwise fall back to startTime or current time to prevent falling into PENDING
+                                        const dateStr = stepState.endTime || stepState.startTime || new Date().toISOString();
+                                        const endTime = new Date(dateStr);
                                         
-                                        // Place in grid
                                         dailyAllocations.push({
                                             date: new Date(endTime),
                                             step,
-                                            status: 'COMPLETED',
+                                            status: stepState.status, // Preserve actual status
                                             partLabel: ''
                                         });
-
-                                        // Update Cursor to MAX(current cursor, Actual End Time)
-                                        // This ensures that if we have multiple completed steps, the cursor is at the latest point
+                                        
                                         if (endTime > pendingStepCursor) {
                                             pendingStepCursor = new Date(endTime);
                                         }
-                                        
-                                        // If the actual end time is past 16:30 (8h shift end), the NEXT step should start next day 8:30
                                         const endH = pendingStepCursor.getHours() + pendingStepCursor.getMinutes()/60;
                                         if (endH >= 16.5) {
                                             pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
@@ -880,102 +895,103 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                         }
 
                                     } else if (stepState.status === 'IN_PROGRESS' && stepState.startTime) {
-                                        // 2. In Progress: Anchor to Actual Start, Simulate Duration
-                                        const startTime = new Date(stepState.startTime);
-                                        
-                                        dailyAllocations.push({
-                                            date: new Date(startTime),
-                                            step,
-                                            status: 'IN_PROGRESS',
-                                            partLabel: ''
-                                        });
+                                        let simulationCursor = new Date(stepState.startTime);
+                                        let hoursRemaining = step.estimatedHours;
+                                        const totalHours = step.estimatedHours;
 
-                                        // Simulation Cursor for THIS ACTIVE STEP specifically
-                                        // We don't want to reset the GLOBAL pendingStepCursor to the past.
-                                        let simulationCursor = new Date(startTime);
-                                        
-                                        // Simulate duration consumption to find End Date for this active step
-                                        let hoursToSimulate = step.estimatedHours;
-                                        
-                                        while (hoursToSimulate > 0) {
-                                             // 1. Check Working Day
-                                             if (!isWorkingDay(simulationCursor, rule)) {
-                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
-                                                 simulationCursor.setHours(8, 30, 0, 0);
-                                                 continue;
-                                             }
-
-                                             // 2. Check Capacity in Current Day
-                                             // End of shift is 16:30 (8.5 + 8)
-                                             const currentH = simulationCursor.getHours() + simulationCursor.getMinutes()/60;
-                                             const endOfDay = 16.5; 
-
-                                             if (currentH >= endOfDay) {
-                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
-                                                 simulationCursor.setHours(8, 30, 0, 0);
-                                                 continue;
-                                             }
-
-                                             // Consume
-                                             const hoursInDay = endOfDay - currentH;
-                                             const consumed = Math.min(hoursToSimulate, hoursInDay);
-                                             
-                                             hoursToSimulate -= consumed;
-                                             
-                                             // Advance Simulation Cursor
-                                             simulationCursor.setTime(simulationCursor.getTime() + consumed * 3600 * 1000);
+                                        // 1. Normalize Start Time (if starts before 8:30, treat as 8:30 for grid alignment)
+                                        if (simulationCursor.getHours() < 8 || (simulationCursor.getHours() === 8 && simulationCursor.getMinutes() < 30)) {
+                                            simulationCursor.setHours(8, 30, 0, 0);
                                         }
 
-                                        // CRITICAL FIX: Ensure global cursor respects this active step's finish time.
-                                        // We only push the global cursor forward, never backward.
-                                        // This handles the "Slide Unit overlapping Base Unit" issue.
+                                        // 2. Calculate initial used hours for the starting day
+                                        let cursorTimeVal = simulationCursor.getHours() + simulationCursor.getMinutes()/60;
+                                        let usedToday = Math.max(0, cursorTimeVal - 8.5); // 8.5 = 8:30 AM
+
+                                        // If started after 16:30 (8h work day end), roll to next day
+                                        if (usedToday >= 8 - 0.01) {
+                                             simulationCursor.setDate(simulationCursor.getDate() + 1);
+                                             simulationCursor.setHours(8, 30, 0, 0);
+                                             usedToday = 0;
+                                        }
+
+                                        while (hoursRemaining > 0) {
+                                             // Roll over if day is full (safety check inside loop)
+                                             if (usedToday >= 8 - 0.01) {
+                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
+                                                 simulationCursor.setHours(8, 30, 0, 0);
+                                                 usedToday = 0;
+                                             }
+
+                                             // Skip Holidays
+                                             let safety = 0;
+                                             while (safety < 60) {
+                                                 if (isWorkingDay(simulationCursor, rule)) {
+                                                     break;
+                                                 }
+                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
+                                                 simulationCursor.setHours(8, 30, 0, 0);
+                                                 usedToday = 0; 
+                                                 safety++;
+                                             }
+
+                                             // Calculate alloc
+                                             const capacity = 8 - usedToday;
+                                             const alloc = Math.min(hoursRemaining, capacity);
+
+                                             if (alloc > 0.01) {
+                                                 dailyAllocations.push({
+                                                     date: new Date(simulationCursor),
+                                                     step,
+                                                     status: 'IN_PROGRESS',
+                                                     partLabel: totalHours > 8 || hoursRemaining < totalHours ? `(${alloc.toFixed(1)}h)` : ''
+                                                 });
+                                             }
+
+                                             hoursRemaining -= alloc;
+                                             usedToday += alloc;
+                                             simulationCursor.setTime(simulationCursor.getTime() + alloc * 3600 * 1000);
+                                        }
+
+                                        // Update global pending cursor
                                         if (simulationCursor > pendingStepCursor) {
                                             pendingStepCursor = new Date(simulationCursor);
                                         }
 
                                     } else {
-                                        // 3. Pending: Start at pendingStepCursor (which is now guaranteed to be after all active work)
-                                        let hoursRemaining = step.estimatedHours;
-                                        let totalHours = step.estimatedHours; // keep ref for part label check
+                                        // LOGIC ADJUSTMENT: PENDING items should not start in the past.
+                                        // If cursor is before effectiveNow, jump to effectiveNow.
+                                        if (pendingStepCursor < effectiveNow) {
+                                            pendingStepCursor = new Date(effectiveNow);
+                                        }
 
-                                        // Calculate current day's usage based on clock time vs 8:30 start
+                                        let hoursRemaining = step.estimatedHours;
+                                        let totalHours = step.estimatedHours;
                                         let cursorTimeVal = pendingStepCursor.getHours() + pendingStepCursor.getMinutes()/60;
-                                        // Assume day starts at 8.5. Usage = current - 8.5.
                                         let usedToday = Math.max(0, cursorTimeVal - 8.5); 
-                                        
-                                        // Safety check: If we are starting this new Pending step but cursor is already past end of shift, move next day
                                         if (usedToday >= 8 - 0.01) {
                                              pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
                                              pendingStepCursor.setHours(8, 30, 0, 0);
                                              usedToday = 0;
                                         }
-
                                         while (hoursRemaining > 0) {
-                                            // 1. Check if we need to advance day due to capacity (Strict 8H Limit)
                                             if (usedToday >= 8 - 0.01) {
                                                  pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
                                                  pendingStepCursor.setHours(8, 30, 0, 0);
                                                  usedToday = 0;
                                             }
-
-                                            // 2. Fast forward to valid working slot (Holidays)
                                             let safety = 0;
                                             while (safety < 60) {
                                                 if (isWorkingDay(pendingStepCursor, rule)) {
                                                     break;
                                                 }
-                                                // Skip holiday
                                                 pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
                                                 pendingStepCursor.setHours(8, 30, 0, 0);
-                                                usedToday = 0; // Reset usage for new day
+                                                usedToday = 0; 
                                                 safety++;
                                             }
-
-                                            // 3. Calculate Allocation for this day
                                             const capacity = 8 - usedToday;
                                             const alloc = Math.min(hoursRemaining, capacity);
-                                            
-                                            // Only push if alloc > 0 to avoid empty blocks
                                             if (alloc > 0.01) {
                                                 dailyAllocations.push({
                                                     date: new Date(pendingStepCursor),
@@ -984,25 +1000,18 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                                     partLabel: totalHours > 8 || hoursRemaining < totalHours ? `(${alloc.toFixed(1)}h)` : ''
                                                 });
                                             }
-
-                                            // 4. Advance state
                                             hoursRemaining -= alloc;
                                             usedToday += alloc;
                                             pendingStepCursor.setTime(pendingStepCursor.getTime() + alloc * 3600 * 1000);
                                         }
-                                        
-                                        // Force jump to next day to ensure visual clarity for pending steps
                                         pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
                                         pendingStepCursor.setHours(8, 30, 0, 0);
                                     }
                                 });
 
-
-                                // Group Steps by Week (Row)
                                 const weeks: Record<string, typeof dailyAllocations> = {};
                                 dailyAllocations.forEach(alloc => {
                                     const d = new Date(alloc.date);
-                                    // Get Start of Week (Monday)
                                     const day = d.getDay();
                                     const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
                                     const monday = new Date(d.setDate(diff));
@@ -1013,11 +1022,11 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                     weeks[key].push(alloc);
                                 });
 
-                                // Sort weeks
                                 const sortedWeekKeys = Object.keys(weeks).sort((a,b) => new Date(a).getTime() - new Date(b).getTime());
 
+                                // Render Module Container
                                 return (
-                                    <div key={parallelMod} className={`relative rounded-lg transition-all duration-300 mb-6 ${isCollapsed ? 'h-px bg-transparent border-0 border-t border-cyber-muted/20 mt-8' : `p-0 pt-8 border ${isModuleFullyComplete ? 'border-green-500/50 bg-green-500/5 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'border-cyber-muted/20 bg-cyber-card/30 hover:border-cyber-blue/30'}`}`}>
+                                    <div key={parallelMod} className={`relative rounded-lg transition-all duration-300 mb-6 ${!isExpanded ? 'h-px bg-transparent border-0 border-t border-cyber-muted/20 mt-8' : `p-0 pt-8 border ${isModuleFullyComplete ? 'border-green-500/50 bg-green-500/5 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'border-cyber-muted/20 bg-cyber-card/30 hover:border-cyber-blue/30'}`}`}>
                                         
                                         {/* Header Badge - Clickable to toggle */}
                                         <div 
@@ -1032,7 +1041,8 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                                 moduleActive > 0 && <span className="w-2 h-2 rounded-full bg-cyber-blue animate-pulse shadow-neon-blue"></span>
                                             )}
                                             <div className={`ml-2 pl-2 border-l flex items-center ${isModuleFullyComplete ? 'border-green-500/30' : 'border-cyber-blue/20 opacity-70 group-hover:opacity-100'}`}>
-                                                {isCollapsed ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}
+                                                {/* If expanded, show UP (collapse), else show DOWN (expand) */}
+                                                {isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                                             </div>
                                         </div>
 
@@ -1040,7 +1050,8 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                             进度: {moduleCompleted}/{steps.length}
                                         </div>
 
-                                        {!isCollapsed && (
+                                        {/* Body Content - Only if Expanded */}
+                                        {isExpanded && (
                                             <div className="p-4 animate-fade-in">
                                                 {/* Week Header */}
                                                 <div className="grid grid-cols-7 gap-1 mb-2 text-center">
@@ -1061,13 +1072,12 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                                             <div key={weekKey} className="relative group/week">
                                                                 <div className="grid grid-cols-7 gap-1 min-h-[60px] border-b border-cyber-muted/5 pb-1">
                                                                     {[0, 1, 2, 3, 4, 5, 6].map(dayIndex => {
-                                                                        // Find steps for this specific day index (Mon=0...Sun=6)
                                                                         const targetJsDay = (dayIndex + 1) % 7;
                                                                         const dayAllocations = weekSteps.filter(s => s.date.getDay() === targetJsDay);
 
                                                                         return (
                                                                             <div key={dayIndex} className="bg-cyber-bg/20 border border-cyber-muted/5 p-1 relative min-h-[60px]">
-                                                                                {/* Date Label Inside Grid (Monday only) */}
+                                                                                {/* Date Label */}
                                                                                 {dayIndex === 0 && (
                                                                                     <div className="absolute top-1 right-1 text-[9px] text-white/70 font-mono leading-none pointer-events-none">
                                                                                         {weekDate.getMonth()+1}/{weekDate.getDate()}
@@ -1082,6 +1092,8 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                                                                             cardStyle = 'bg-cyber-blue/20 border-cyber-blue text-white shadow-neon-blue';
                                                                                         } else if (alloc.status === 'COMPLETED') {
                                                                                             cardStyle = 'bg-green-500/10 border-green-500/30 text-green-400 opacity-80';
+                                                                                        } else if (alloc.status === 'SKIPPED') {
+                                                                                            cardStyle = 'bg-cyber-orange/10 border-cyber-orange/30 text-cyber-orange opacity-80';
                                                                                         }
 
                                                                                         return (
@@ -1096,6 +1108,21 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                                                                                         <CheckCircle size={12} className="flex-shrink-0" />
                                                                                                         <span className="truncate">{step.name} {alloc.partLabel}</span>
                                                                                                     </div>
+                                                                                                ) : alloc.status === 'SKIPPED' ? (
+                                                                                                    <>
+                                                                                                        <div className="flex items-center gap-2 w-full opacity-80 mb-0.5">
+                                                                                                            <Ban size={10} className="text-cyber-orange" />
+                                                                                                            <div className="text-[9px] border border-current px-1 rounded leading-none whitespace-nowrap">
+                                                                                                                {step.module}
+                                                                                                            </div>
+                                                                                                            <div className="text-[10px] font-mono leading-none decoration-slice">
+                                                                                                                 0H (忽略)
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        <div className="leading-snug font-bold break-words text-sm text-left line-through decoration-cyber-orange/50">
+                                                                                                            {step.name}
+                                                                                                        </div>
+                                                                                                    </>
                                                                                                 ) : (
                                                                                                     <>
                                                                                                         <div className="flex items-center gap-2 w-full opacity-80 mb-0.5">
