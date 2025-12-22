@@ -11,9 +11,10 @@
         theme: {
           extend: {
             fontFamily: {
-              sans: ['"Microsoft YaHei"', 'Inter', 'sans-serif'],
-              mono: ['Share Tech Mono', 'monospace'],
-              display: ['Orbitron', 'sans-serif'],
+              // 統一將 sans, mono, display 首位設為微軟雅黑
+              sans: ['"Microsoft YaHei"', '"微软雅黑"', 'sans-serif'],
+              mono: ['"Microsoft YaHei"', '"微软雅黑"', 'Share Tech Mono', 'monospace'],
+              display: ['"Microsoft YaHei"', '"微软雅黑"', 'Orbitron', 'sans-serif'],
             },
             colors: {
               cyber: {
@@ -56,9 +57,9 @@
         padding: 0;
         width: 100%;
         height: 100%;
-        background-color: #000000; /* Black bars for letterboxing */
-        overflow: hidden; /* Prevent native scrollbars, scrolling is handled inside the app container */
-        font-family: "Microsoft YaHei", "Inter", sans-serif;
+        background-color: #000000; 
+        overflow: hidden; 
+        font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
         color: #e2e8f0;
       }
 
@@ -78,7 +79,7 @@
         background: #00f0ff; 
       }
 
-      /* Neon Text Effect for Title - Sharper for Readability */
+      /* Neon Text Effect for Title */
       .neon-header-text {
         color: #ffffff;
         text-shadow: 
@@ -96,7 +97,7 @@
           0 0 20px rgba(0, 240, 255, 0.4);
       }
 
-      /* Subtle pulse animation - less distracting */
+      /* Subtle pulse animation */
       @keyframes neon-pulse-slow {
         0%, 100% {
           opacity: 1;
