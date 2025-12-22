@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MachineModel, WorkOrder, MachineStatus, HolidayType } from '../types';
 import { calculateProjectedDate } from '../services/holidayService';
-import { Plus, Calendar, Disc, Hash, Factory, Save, Filter, Edit, Trash2, X, User, Settings, CalendarClock, Lock, FileDown, Upload, Search, ChevronDown, CheckSquare, Square, Layers, Download } from 'lucide-react';
+import { Plus, Calendar, Disc, Hash, Factory, Save, Filter, Edit, Trash2, X, User, Settings, CalendarClock, Lock, FileDown, Upload, Search, ChevronDown, CheckSquare, Square, Layers, Download, PauseCircle, PlayCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface OrderDatabaseProps {
@@ -187,7 +187,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
       const exportData = orders.map(order => {
         const modelName = models.find(m => m.id === order.modelId)?.name || order.modelId;
         return {
-            "机台号": order.id, "机型": modelName, "状态": order.status === 'IN_PROGRESS' ? '进行中' : order.status === 'COMPLETED' ? '已完成' : '计划中', "生产车间": order.workshop, "客户名称": order.clientName || '',
+            "机台号": order.id, "机型": modelName, "状态": order.status === 'IN_PROGRESS' ? '进行中' : order.status === 'HALTED' ? '暂停中' : order.status === 'COMPLETED' ? '已完成' : '计划中', "生产车间": order.workshop, "客户名称": order.clientName || '',
             "计划上线日期": order.startDate ? new Date(order.startDate).toLocaleDateString() : '',
             "计划完工日期": order.originalEstimatedCompletionDate ? new Date(order.originalEstimatedCompletionDate).toLocaleDateString() : '',
             "生产完工日期": order.estimatedCompletionDate ? new Date(order.estimatedCompletionDate).toLocaleDateString() : '',
@@ -242,7 +242,12 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
   const triggerFileUpload = () => { fileInputRef.current?.click(); };
   const getModelName = (id: string) => models.find(m => m.id === id)?.name || '未知机型';
   const WORKSHOP_OPTIONS = [ { value: 'K1(18栋)', label: 'K1(18栋)' }, { value: 'K2(17栋)', label: 'K2(17栋)' }, { value: 'K3(戚墅堰)', label: 'K3(戚墅堰)' } ];
-  const STATUS_OPTIONS = [ { value: 'PLANNED', label: 'PLANNED (排队中)', color: 'text-cyber-orange' }, { value: 'IN_PROGRESS', label: 'IN_PROGRESS (进行中)', color: 'text-cyber-blue' }, { value: 'COMPLETED', label: 'COMPLETED (已完成)', color: 'text-green-500' } ];
+  const STATUS_OPTIONS = [ 
+    { value: 'PLANNED', label: 'PLANNED (排队中)', color: 'text-cyber-orange' }, 
+    { value: 'IN_PROGRESS', label: 'IN_PROGRESS (进行中)', color: 'text-cyber-blue' }, 
+    { value: 'HALTED', label: 'HALTED (暂停中)', color: 'text-red-500' },
+    { value: 'COMPLETED', label: 'COMPLETED (已完成)', color: 'text-green-500' } 
+  ];
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -286,6 +291,40 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
                     <div className="space-y-6">
+                        {editingOrderId && (
+                            <div className="p-4 bg-cyber-bg/60 border border-cyber-blue/20 rounded mb-4">
+                                <label className="block text-xs font-mono text-cyber-muted mb-3 uppercase tracking-wider">当前状态控制</label>
+                                <div className="flex items-center gap-4">
+                                    <div className={`px-3 py-2 border rounded font-mono text-sm ${
+                                        existingStatus === MachineStatus.IN_PROGRESS ? 'border-cyber-blue text-cyber-blue bg-cyber-blue/5' :
+                                        existingStatus === MachineStatus.HALTED ? 'border-red-500 text-red-500 bg-red-500/5 shadow-[0_0_10px_rgba(239,68,68,0.2)]' :
+                                        'border-cyber-muted text-cyber-muted bg-white/5'
+                                    }`}>
+                                        状态: {existingStatus === MachineStatus.IN_PROGRESS ? '进行中' : existingStatus === MachineStatus.HALTED ? '暂停生产' : existingStatus}
+                                    </div>
+                                    
+                                    {existingStatus === MachineStatus.IN_PROGRESS && (
+                                        <button 
+                                            onClick={() => setExistingStatus(MachineStatus.HALTED)}
+                                            className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] group"
+                                        >
+                                            <PauseCircle size={18} className="group-hover:scale-110 transition-transform" /> 暫停生產
+                                        </button>
+                                    )}
+                                    
+                                    {existingStatus === MachineStatus.HALTED && (
+                                        <button 
+                                            onClick={() => setExistingStatus(MachineStatus.IN_PROGRESS)}
+                                            className="flex items-center gap-2 bg-cyber-blue hover:bg-white text-black font-bold py-2 px-4 rounded transition-all shadow-neon-blue group"
+                                        >
+                                            <PlayCircle size={18} className="group-hover:scale-110 transition-transform" /> 恢復生產
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-cyber-muted mt-2 italic">* 暂停生产状态将反映在工作站与看板视图中。</p>
+                            </div>
+                        )}
+
                          <div>
                             <label className="block text-xs font-mono text-cyber-blue mb-2 uppercase tracking-wider flex items-center gap-2"><Disc size={14}/> 选择工艺模型 (机型) <span className="text-red-500">*</span></label>
                             <select value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)} className="w-full bg-cyber-bg border border-cyber-muted/40 p-3 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm">
@@ -350,7 +389,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                 </div>
                 <div className="pt-8 border-t border-cyber-muted/20 mt-8 flex justify-end gap-4">
                     {editingOrderId && <button onClick={handleCancelEdit} className="bg-transparent border border-cyber-muted text-cyber-muted hover:text-white px-6 py-3 font-display font-bold uppercase tracking-wider transition-all">取消</button>}
-                    <button onClick={handleSaveOrder} className="bg-cyber-blue hover:bg-white text-black font-display font-bold uppercase py-3 px-8 shadow-neon-blue transition-all flex items-center gap-2 tracking-wider"><Save size={18} /> {editingOrderId ? '更新工单' : '生成工單'}</button>
+                    <button onClick={handleSaveOrder} className="bg-cyber-blue hover:bg-white text-black font-display font-bold uppercase py-3 px-8 shadow-neon-blue transition-all flex items-center justify-center gap-2 tracking-wider"><Save size={18} /> {editingOrderId ? '更新工单' : '生成工單'}</button>
                 </div>
              </div>
         )}
@@ -362,7 +401,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                         <div className="relative group"><Search className="absolute left-3 top-2.5 text-cyber-muted group-focus-within:text-cyber-blue transition-colors" size={16} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="搜索机台号/客户..." className="bg-cyber-bg border border-cyber-muted/30 pl-10 pr-4 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyber-blue w-64 transition-all"/></div>
                         <MultiSelectFilter label="生产车间" options={WORKSHOP_OPTIONS} selectedValues={selectedWorkshops} onChange={setSelectedWorkshops} icon={<Factory size={14} />} />
                         <MultiSelectFilter label="当前状态" options={STATUS_OPTIONS} selectedValues={selectedStatuses} onChange={setSelectedStatuses} icon={<Filter size={14} />} />
-                        <div className="relative"><Disc size={14} className="absolute left-3 top-3 text-cyber-muted" /><select value={filterModel} onChange={(e) => setFilterModel(e.target.value)} className="bg-cyber-bg border border-cyber-muted/30 pl-9 pr-8 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyber-blue appearance-none min-w-[140px]"><option value="ALL">全部机型</option>{models.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}</select><ChevronDown size={14} className="absolute right-3 top-3 text-cyber-muted pointer-events-none" /></div>
+                        <div className="relative"><Disc size={14} className="absolute left-3 top-3 text-cyber-muted" /><select value={filterModel} onChange={(e) => setFilterModel(e.target.value)} className="bg-cyber-bg border border-cyber-muted/30 pl-9 pr-8 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyber-blue appearance-none min-w-[140px]"><option value="ALL">全部机型</option>{models.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}</select><ChevronDown size={14} className="absolute right-3 top-3 text-cyber-muted pointer-none" /></div>
                         <div className="flex items-center gap-2 text-cyber-blue font-mono text-sm ml-auto"><Filter size={16} /><span>显示: {filteredOrders.length} / 总数: {orders.length}</span></div>
                     </div>
                 </div>
@@ -383,7 +422,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                                         </td>
                                         <td className="p-4 text-cyber-text/80">{getModelName(order.modelId)}</td>
                                         <td className="p-4 text-cyber-text/80"><span className="text-[10px] bg-cyber-muted/10 px-1 rounded border border-cyber-muted/20">{order.holidayType === 'DOUBLE' ? '双休' : order.holidayType === 'SINGLE' ? '单休' : order.holidayType === 'ALTERNATE' ? '隔周休' : '无休'}</span></td>
-                                        <td className="p-4"><span className={`px-2 py-0.5 text-[10px] border ${order.status === 'IN_PROGRESS' ? 'border-cyber-blue text-cyber-blue' : order.status === 'COMPLETED' ? 'border-green-500 text-green-500' : 'border-cyber-muted text-cyber-muted'}`}>{order.status}</span></td>
+                                        <td className="p-4"><span className={`px-2 py-0.5 text-[10px] border ${order.status === 'IN_PROGRESS' ? 'border-cyber-blue text-cyber-blue' : order.status === 'HALTED' ? 'border-red-500 text-red-500 bg-red-500/5' : order.status === 'COMPLETED' ? 'border-green-500 text-green-500' : 'border-cyber-muted text-cyber-muted'}`}>{order.status}</span></td>
                                         <td className="p-4 text-cyber-muted">{order.workshop}</td>
                                         <td className="p-4 text-cyber-text/80">{new Date(order.startDate).toLocaleDateString()}</td>
                                         <td className="p-4 text-cyber-orange">{order.businessClosingDate ? new Date(order.businessClosingDate).toLocaleDateString() : '-'}</td>

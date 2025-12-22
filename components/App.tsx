@@ -48,24 +48,21 @@ function App() {
       const windowWidth = window.innerWidth;
       const windowHeight = window.innerHeight;
 
-      // Calculate the scale to fit the window while maintaining aspect ratio
       const scaleX = windowWidth / targetWidth;
       const scaleY = windowHeight / targetHeight;
       const scale = Math.min(scaleX, scaleY);
 
-      // Calculate position to center the scaled content
       const x = (windowWidth - targetWidth * scale) / 2;
       const y = (windowHeight - targetHeight * scale) / 2;
 
       setScaleProps({ scale, x, y });
     };
 
-    calculateScale(); // Initial calc
+    calculateScale();
     window.addEventListener('resize', calculateScale);
     return () => window.removeEventListener('resize', calculateScale);
   }, []);
 
-  // Check for persisted login on mount
   useEffect(() => {
     const storedUser = localStorage.getItem('ken_mes_current_user');
     if (storedUser) {
@@ -74,7 +71,6 @@ function App() {
     }
   }, []);
 
-  // Fetch data only after login
   useEffect(() => {
     if (!currentUser) return;
 
@@ -121,7 +117,6 @@ function App() {
     setIsDataLoaded(false); 
   };
 
-  // --- Order Actions ---
   const updateStepStatus = async (orderId: string, stepId: string, status: StepStatusEnum) => {
       const targetOrder = orders.find(o => o.id === orderId);
       if (!targetOrder) return;
@@ -154,14 +149,12 @@ function App() {
            });
       }
 
-      // Count COMPLETED and SKIPPED as progress
       const completedSteps = Object.values(newStepStates).filter((s: StepState) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
       
       let newEstimatedDate = targetOrder.estimatedCompletionDate;
       if (model) {
           const getRemainingHoursForStep = (s: ProcessStep) => {
              const currentStatus = newStepStates[s.id]?.status;
-             // If COMPLETED or SKIPPED, remaining hours = 0
              const isDone = currentStatus === 'COMPLETED' || currentStatus === 'SKIPPED';
              return isDone ? 0 : s.estimatedHours;
           };
@@ -199,9 +192,8 @@ function App() {
         setLastSaveTime(new Date()); 
       } catch (e: any) { 
         console.error("Update failed", e);
-        // Rollback on failure
         setOrders(prev => prev.map(o => o.id === orderId ? targetOrder : o));
-        alert(`更新失败: ${e.message || '未知错误，请检查网络或数据库连接'}`);
+        alert(`更新失败: ${e.message || '未知错误，请檢查網路或資料庫連接'}`);
       }
   };
 
@@ -232,8 +224,7 @@ function App() {
       try { await orderApi.createAnomaly(orderId, anomaly); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
         console.error("Add anomaly failed", e);
         setOrders(prev => prev.map(o => o.id === orderId ? targetOrder : o));
-        const errMsg = e.message || JSON.stringify(e);
-        alert(`保存异常记录失败: ${errMsg}\n\n请检查数据库 RLS 权限设置。`);
+        alert(`保存异常记录失败: ${e.message || JSON.stringify(e)}`);
       }
   };
 
@@ -262,7 +253,7 @@ function App() {
     setOrders(prev => [newOrder, ...prev]); 
     try { await orderApi.create(newOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
       setOrders(prev => prev.filter(o => o.id !== newOrder.id));
-      alert(`创建失败: ${e.message}\n详情: ${e.details || '无详细信息'}`);
+      alert(`创建失败: ${e.message}`);
     }
   };
 
@@ -270,7 +261,7 @@ function App() {
     const targetId = originalId || updatedOrder.id;
     setOrders(prev => prev.map(o => o.id === targetId ? updatedOrder : o));
     try { await orderApi.update(updatedOrder, originalId); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
-      alert(`更新失败: ${e.message}\n详情: ${e.details || '无详细信息'}`);
+      alert(`更新失败: ${e.message}`);
     }
   };
 
@@ -280,7 +271,7 @@ function App() {
       setOrders(prev => prev.filter(o => o.id !== id));
       try { await orderApi.delete(id); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) {
         setOrders(prevOrders); 
-        alert(`删除失败: ${e.message}\n详情: ${e.details || '无详细信息'}`);
+        alert(`删除失败: ${e.message}`);
       }
     }
   };
@@ -348,6 +339,19 @@ function App() {
 
     switch (currentView) {
       case 'DASHBOARD': return <Dashboard orders={orders} models={models} />;
+      case 'WORK_SCHEDULE': 
+        return (
+          <Workstation 
+            orders={orders} 
+            models={models} 
+            holidayRules={holidayRules} 
+            // In Read-Only mode, ensure callbacks are empty to prevent accidental state changes
+            onUpdateStepStatus={() => {}} 
+            onStatusChange={() => {}} 
+            onAddAnomaly={() => {}} 
+            isReadOnly={true} 
+          />
+        );
       case 'WORKSTATION': return <Workstation orders={orders} models={models} holidayRules={holidayRules} onUpdateStepStatus={updateStepStatus} onStatusChange={updateStatus} onAddAnomaly={handleAddAnomaly} />;
       case 'ANOMALY_LIST': return <AnomalyList orders={orders} models={models} onUpdateAnomaly={handleUpdateAnomaly} onDeleteAnomaly={handleDeleteAnomaly} />;
       case 'REPORT_DOWNLOAD': return <ReportDownload orders={orders} models={models} />;
@@ -394,8 +398,8 @@ function App() {
         left: 0,
         transform: `translate(${scaleProps.x}px, ${scaleProps.y}px) scale(${scaleProps.scale})`,
         transformOrigin: 'top left',
-        backgroundColor: '#050b14', // Match the app background
-        boxShadow: '0 0 50px rgba(0,0,0,0.8)', // Shadow to separate from letterboxing
+        backgroundColor: '#050b14',
+        boxShadow: '0 0 50px rgba(0,0,0,0.8)',
         overflow: 'hidden'
       }}>
         {!currentUser ? <LoginScreen onLoginSuccess={handleLogin} /> : appContent}

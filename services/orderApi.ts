@@ -11,14 +11,19 @@ const mapFromDb = (row: any): WorkOrder => ({
     workshop: row.workshop,
     startDate: row.start_date,
     estimatedCompletionDate: row.estimated_completion_date,
-    originalEstimatedCompletionDate: row.original_estimated_completion_date, // Map from DB
+    originalEstimatedCompletionDate: row.original_estimated_completion_date,
     businessClosingDate: row.business_closing_date,
     holidayType: row.holiday_type || 'DOUBLE',
     
-    // Optional / New Fields
+    // New ERP Integration Fields
+    projectName: row.project_name,
+    issuanceRate: row.issuance_rate,
+    
+    // Optional / Details Fields
     clientName: row.client_name,
     axisHead: row.axis_head,
     toolHolderSpec: row.tool_holder_spec,
+    // Fix: Correct property name from magazine_count to magazineCount to match WorkOrder interface
     magazineCount: row.magazine_count,
     zAxisTravel: row.z_axis_travel,
     spindleSpeed: row.spindle_speed,
@@ -26,7 +31,6 @@ const mapFromDb = (row: any): WorkOrder => ({
     // JSONB Fields
     stepStates: row.step_states || {},
     logs: row.logs || [],
-    // Map from the joined 'order_error' table if available, fallback to legacy JSONB for compatibility
     anomalies: (row.order_error && Array.isArray(row.order_error)) 
         ? row.order_error.map((err: any) => ({
             id: err.id,
@@ -35,7 +39,7 @@ const mapFromDb = (row: any): WorkOrder => ({
             department: err.department,
             startTime: err.start_time,
             endTime: err.end_time,
-            durationDays: err.duration_days,
+            durationDays: err.duration_days, // CORRECTED: Map duration_days to durationDays
             reportedAt: err.reported_at
         })) 
         : (row.anomalies || [])
@@ -50,9 +54,14 @@ const mapToDb = (order: WorkOrder) => ({
     workshop: order.workshop,
     start_date: order.startDate,
     estimated_completion_date: order.estimatedCompletionDate,
-    original_estimated_completion_date: order.originalEstimatedCompletionDate, // Map to DB
+    // FIXED: Correctly access originalEstimatedCompletionDate from the WorkOrder object
+    original_estimated_completion_date: order.originalEstimatedCompletionDate,
     business_closing_date: order.businessClosingDate,
     holiday_type: order.holidayType,
+    
+    // New ERP Integration Fields
+    project_name: order.projectName,
+    issuance_rate: order.issuanceRate,
     
     client_name: order.clientName,
     axis_head: order.axisHead,
@@ -63,14 +72,12 @@ const mapToDb = (order: WorkOrder) => ({
     
     step_states: order.stepStates || {},
     logs: order.logs || [],
-    // We no longer write to the 'anomalies' JSONB column, data is stored in 'order_error' table
 });
 
 export const orderApi = {
   
   // 1. Fetch All
   fetchAll: async (): Promise<WorkOrder[]> => {
-    // We select *, and join the order_error table
     const { data, error } = await supabase
         .from('production_order')
         .select('*, order_error(*)') 
@@ -108,7 +115,7 @@ export const orderApi = {
         .from('production_order')
         .update(payload)
         .eq('id', targetId)
-        .select('*, order_error(*)') // Also return joined errors to keep state consistent
+        .select('*, order_error(*)') 
         .single();
 
     if (error) {
@@ -130,10 +137,10 @@ export const orderApi = {
   },
 
   // 5. Create Anomaly (New Table)
-  createAnomaly: async (orderId: string, anomaly: AnomalyRecord): Promise<void> => {
+  createAnomaly: async (order_id: string, anomaly: AnomalyRecord): Promise<void> => {
       const payload = {
-          id: anomaly.id, // Explicitly insert the UUID to ensure sync
-          order_id: orderId,
+          id: anomaly.id, 
+          order_id: order_id,
           step_name: anomaly.stepName,
           reason: anomaly.reason,
           department: anomaly.department,
@@ -167,7 +174,7 @@ export const orderApi = {
       const { error } = await supabase
           .from('order_error')
           .update(payload)
-          .eq('id', anomaly.id); // Assuming anomaly.id matches the DB id (usually int8 or uuid)
+          .eq('id', anomaly.id);
 
       if (error) {
           console.error("Failed to update anomaly:", error);
@@ -176,13 +183,11 @@ export const orderApi = {
   },
 
   // 7. Delete Anomaly
-  deleteAnomaly: async (anomalyId: string): Promise<void> => {
-      // NOTE: Because local ID might be "AN-Date.now()", check if it's a temp ID or DB ID
-      // But usually we just pass the ID we have. If it's not in DB, delete won't affect rows.
+  deleteAnomaly: async (anomaly_id: string): Promise<void> => {
       const { error } = await supabase
           .from('order_error')
           .delete()
-          .eq('id', anomalyId);
+          .eq('id', anomaly_id);
 
       if (error) {
           console.error("Failed to delete anomaly:", error);

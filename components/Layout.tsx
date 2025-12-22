@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, AppUser, UserRole } from '../types';
-import { LayoutDashboard, Wrench, Database, Activity, Cpu, Server, CalendarClock, UserCog, LogOut, AlertOctagon, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { LayoutDashboard, Wrench, Database, Activity, Cpu, Server, CalendarClock, UserCog, LogOut, AlertOctagon, ChevronLeft, ChevronRight, FileText, CalendarRange } from 'lucide-react';
 
 interface LayoutProps {
   currentView: View;
@@ -36,7 +36,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
 
   // Helper to check permission
   const hasPermission = (view: View) => {
-      // FIXED: Strictly check allowedViews, removed hotfix override for REPORT_DOWNLOAD
       return currentUser.allowedViews?.includes(view);
   };
 
@@ -74,6 +73,17 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 isCollapsed={isCollapsed}
             />
           )}
+
+          {hasPermission('WORK_SCHEDULE') && (
+            <NavItem 
+                icon={<CalendarRange size={20} />} 
+                label="工作日排程" 
+                isActive={currentView === 'WORK_SCHEDULE'} 
+                onClick={() => onNavigate('WORK_SCHEDULE')} 
+                isCollapsed={isCollapsed}
+                badge="看板"
+            />
+          )}
           
           {hasPermission('WORKSTATION') && (
             <NavItem 
@@ -102,7 +112,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                 isActive={currentView === 'REPORT_DOWNLOAD'} 
                 onClick={() => onNavigate('REPORT_DOWNLOAD')} 
                 isCollapsed={isCollapsed}
-                badge="NEW"
             />
           )}
           
@@ -157,28 +166,19 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
         </nav>
 
         <div className={`p-4 border-t border-cyber-blue/20 text-xs text-cyber-muted transition-all duration-300 overflow-hidden flex-shrink-0 ${isCollapsed ? 'hidden' : 'hidden md:block'} font-mono`}>
-          {/* Company Name */}
           <p className="text-white mb-2 tracking-wider text-sm uppercase whitespace-nowrap">
             大前机床(江苏)有限公司
           </p>
-
-          {/* Time */}
           <p className="text-cyber-orange text-sm tracking-widest mb-2 whitespace-nowrap">
             {formatTime(currentTime)}
           </p>
-          
-          {/* System Status */}
           <p className="mb-2 whitespace-nowrap">系统状态: <span className="text-green-400">在线</span></p>
-
-          {/* DB Status */}
           <div className="flex items-center gap-2 mb-2 whitespace-nowrap">
              <span>数据库状态:</span>
              {dbStatus === 'CONNECTING' && <span className="text-yellow-400 animate-pulse">连接中...</span>}
              {dbStatus === 'CONNECTED' && <span className="text-green-400 font-bold">🟢 连接成功</span>}
              {dbStatus === 'ERROR' && <span className="text-red-500 font-bold">🔴 连接失败</span>}
           </div>
-          
-          {/* Last Save Time Indicator */}
           <div className="flex items-center gap-2 pt-2 border-t border-cyber-muted/10 whitespace-nowrap">
               <div className={`w-2 h-2 rounded-full ${lastSaveTime ? 'bg-green-500 shadow-[0_0_5px_#22c55e] animate-pulse' : 'bg-cyber-muted'}`}></div>
               <span className="text-[10px] opacity-70">
@@ -187,7 +187,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
           </div>
         </div>
         
-        {/* Collapsed Mode Footer Indicator (Dot only) */}
         {isCollapsed && (
             <div className="py-4 flex flex-col items-center gap-4 border-t border-cyber-blue/20 flex-shrink-0">
                 <div title={`系统状态: 在线`} className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_5px_#22c55e]"></div>
@@ -198,17 +197,15 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {/* Decorative Grid Background */}
         <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
              style={{ backgroundImage: 'linear-gradient(rgba(0, 240, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 240, 255, 0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }}>
         </div>
 
         <header className="h-28 bg-transparent flex items-start justify-between px-6 z-10 relative pt-2 pointer-events-none flex-shrink-0">
-          
-          {/* Left Title Area */}
           <div className="w-1/6 pt-6 pointer-events-auto z-30 min-w-[200px]">
               <h1 className="text-xl font-display font-bold text-white tracking-wide uppercase flex items-center gap-2 drop-shadow-[0_0_5px_rgba(0,0,0,0.8)]">
                 {currentView === 'DASHBOARD' && <><Activity className="text-cyber-orange" /> 生产总览</>}
+                {currentView === 'WORK_SCHEDULE' && <><CalendarRange className="text-cyber-blue" /> 工作日排程</>}
                 {currentView === 'WORKSTATION' && <><Wrench className="text-cyber-blue" /> 生产排程</>}
                 {currentView === 'ANOMALY_LIST' && <><AlertOctagon className="text-cyber-orange" /> 异常监控</>}
                 {currentView === 'REPORT_DOWNLOAD' && <><FileText className="text-cyber-blue" /> 报表中心</>}
@@ -219,21 +216,13 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
               </h1>
           </div>
 
-          {/* Center Title - New Inverted Trapezoid Design with Wings */}
-          {/* Constrained max-width to prevent overlap with left/right modules */}
           <div className="absolute left-0 top-0 w-full h-full pointer-events-none z-20 flex items-start justify-center">
             <div className="flex items-start mt-3.5 filter drop-shadow-[0_0_20px_rgba(0,0,0,0.6)] w-full justify-center max-w-[90%] lg:max-w-[70%] xl:max-w-[60%]">
-                
-                {/* Left Slogan Wing - Mirror Image */}
                 <div className="hidden 2xl:flex items-start pt-2 mr-[-5px] pointer-events-auto transform transition-transform hover:scale-105 origin-right">
                     <div className="relative h-12 w-48 bg-gradient-to-r from-blue-900/40 to-slate-900/90"
                          style={{ clipPath: 'polygon(10% 0, 100% 0, 90% 100%, 0% 100%)' }}>
-                        
-                        {/* Top Line */}
                         <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400/30"></div>
-                        {/* Bottom Line */}
                         <div className="absolute bottom-0 left-0 w-full h-[3px] bg-cyan-400/50 shadow-[0_0_10px_#00f0ff]"></div>
-                        
                         <div className="flex items-center justify-center h-full w-full pr-4">
                             <span className="font-display font-black text-lg text-cyan-50 tracking-[0.2em] italic drop-shadow-md opacity-90">
                                 日日精进
@@ -242,43 +231,27 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                     </div>
                 </div>
 
-                {/* Main Title Block - Inverted Trapezoid */}
-                {/* Dynamic Width based on content, but with min width */}
                 <div className="relative h-20 min-w-[320px] max-w-full pointer-events-auto transform transition-transform hover:scale-105 origin-top z-10 flex-shrink-0">
-                    {/* Background Structure: Inverted Trapezoid */}
                     <div className="absolute inset-0 bg-gradient-to-b from-slate-900 via-[#0a1529] to-[#050b14]"
                          style={{ clipPath: 'polygon(0 0, 100% 0, 93% 100%, 7% 100%)' }}>
-                         
-                         {/* Bottom Orange Line */}
                          <div className="absolute bottom-0 left-0 right-0 h-[4px] bg-cyber-orange shadow-[0_0_15px_#ff8800]"></div>
-                         
-                         {/* Subtle grid pattern inside */}
                          <div className="absolute inset-0 opacity-20 bg-[linear-gradient(rgba(255,136,0,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,136,0,0.1)_1px,transparent_1px)] bg-[length:20px_20px]"></div>
                     </div>
-                    
-                    {/* The Text */}
                     <div className="relative z-10 h-full flex items-center justify-center pb-2 px-12 md:px-16">
                         <h1 className="text-2xl md:text-3xl lg:text-5xl font-display font-black tracking-[0.15em] text-white uppercase whitespace-nowrap"
                              style={{ textShadow: '0 0 10px rgba(255,136,0,0.6), 0 0 20px rgba(255,136,0,0.4)' }}>
                            大前机床生产管理看板
                         </h1>
                     </div>
-                    
-                    {/* Decorative Dots */}
                     <div className="absolute bottom-2 left-[12%] w-1.5 h-1.5 bg-cyber-orange rounded-full animate-pulse shadow-[0_0_5px_#ff8800]"></div>
                     <div className="absolute bottom-2 right-[12%] w-1.5 h-1.5 bg-cyber-orange rounded-full animate-pulse delay-75 shadow-[0_0_5px_#ff8800]"></div>
                 </div>
 
-                {/* Right Slogan Wing - Mirror Image */}
                 <div className="hidden 2xl:flex items-start pt-2 ml-[-5px] pointer-events-auto transform transition-transform hover:scale-105 origin-left">
                     <div className="relative h-12 w-48 bg-gradient-to-l from-blue-900/40 to-slate-900/90"
                          style={{ clipPath: 'polygon(0 0, 90% 0, 100% 100%, 10% 100%)' }}>
-                        
-                        {/* Top Line */}
                         <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400/30"></div>
-                        {/* Bottom Line */}
                         <div className="absolute bottom-0 left-0 w-full h-[3px] bg-cyan-400/50 shadow-[0_0_10px_#00f0ff]"></div>
-
                         <div className="flex items-center justify-center h-full w-full pl-4">
                              <span className="font-display font-black text-lg text-cyan-50 tracking-[0.2em] italic drop-shadow-md opacity-90">
                                 成就典范
@@ -289,7 +262,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
             </div>
           </div>
 
-          {/* Right User Area */}
           <div className="flex items-center space-x-6 justify-end w-1/6 pt-6 pointer-events-auto z-30 min-w-[200px]">
              <div className="hidden sm:flex flex-col items-end font-mono">
                 <span className="text-sm font-medium text-cyber-blue">{currentUser.name}</span>
@@ -300,8 +272,6 @@ export const Layout: React.FC<LayoutProps> = ({ currentView, onNavigate, childre
                      | {currentUser.department || 'General'}
                 </span>
              </div>
-             
-             {/* User Avatar with Dropdown/Logout */}
              <button 
                 onClick={onLogout}
                 className="h-10 w-10 rounded border border-cyber-blue bg-cyber-blueDim flex items-center justify-center text-cyber-blue font-bold shadow-neon-blue relative overflow-hidden group transition-all hover:bg-red-500/20 hover:border-red-500 hover:text-red-500"

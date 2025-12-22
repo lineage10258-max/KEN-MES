@@ -1,34 +1,12 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { WorkOrder, MachineModel } from "../types";
 
-// Safety check for browser environment where process might not be defined
-const getApiKey = () => {
-    try {
-        if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-            return process.env.API_KEY;
-        }
-    } catch (e) {
-        // Ignore reference errors
-    }
-    return '';
-};
-
-const GEMINI_API_KEY = getApiKey();
-
-// Safely initialize client
-let aiClient: GoogleGenAI | null = null;
-try {
-    if (GEMINI_API_KEY) {
-        aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-    } else {
-        console.warn("Gemini API Key is missing. AI features will be disabled.");
-    }
-} catch (error) {
-    console.error("Failed to initialize Gemini client:", error);
-}
-
+// Note: Always obtain the API key exclusively from process.env.API_KEY.
+// Initialization and usage follow the latest @google/genai SDK guidelines.
 export const generateFactoryInsight = async (orders: WorkOrder[], models: MachineModel[]): Promise<string> => {
-  if (!aiClient) return "AI 服务不可用，请检查 API 密钥配置。";
+  // Create a new GoogleGenAI instance right before making an API call.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   // Prepare a lightweight context for the AI
   const activeOrders = orders.filter(o => o.status === 'IN_PROGRESS');
@@ -63,10 +41,13 @@ export const generateFactoryInsight = async (orders: WorkOrder[], models: Machin
   `;
 
   try {
-    const response = await aiClient.models.generateContent({
-      model: 'gemini-2.5-flash',
+    // Using gemini-3-flash-preview as the standard for basic text analysis tasks.
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
+    
+    // Use the .text property directly as per modern guidelines.
     return response.text || "未生成分析。";
   } catch (error) {
     console.error("Gemini API Error:", error);

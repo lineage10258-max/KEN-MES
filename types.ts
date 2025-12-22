@@ -17,7 +17,7 @@ export enum UserRole {
   OPERATOR = 'OPERATOR'  // 生产: Workstation execution only
 }
 
-export type View = 'DASHBOARD' | 'WORKSTATION' | 'ANOMALY_LIST' | 'ORDER_DB' | 'MODEL_DB' | 'HOLIDAY_DB' | 'USER_DB' | 'REPORT_DOWNLOAD';
+export type View = 'DASHBOARD' | 'WORKSTATION' | 'WORK_SCHEDULE' | 'ANOMALY_LIST' | 'ORDER_DB' | 'MODEL_DB' | 'HOLIDAY_DB' | 'USER_DB' | 'REPORT_DOWNLOAD';
 
 export interface AppUser {
   id: string;
@@ -84,29 +84,32 @@ export interface WorkOrder {
   id: string; // Serial Number, e.g., "SN-2023-884"
   modelId: string;
   status: MachineStatus;
-  currentStepIndex: number; // Deprecated conceptually, but kept for compatibility or overall progress calc
-  workshop: string; // New field: 生产车间
-  startDate: string; // ISO Date: 计划上线日
+  currentStepIndex: number; 
+  workshop: string; 
+  startDate: string; 
   
-  estimatedCompletionDate: string; // ISO Date: 实时的生产完工日 (Production Completion)
-  originalEstimatedCompletionDate?: string; // ISO Date: 原始的计划完工日 (Planned Completion)
+  estimatedCompletionDate: string; 
+  originalEstimatedCompletionDate?: string; 
 
-  businessClosingDate?: string; // New field: 业务结关日
+  businessClosingDate?: string; 
   
-  // New Fields for Order Details
-  clientName?: string; // 客户名称
-  axisHead?: string; // 二轴头
-  toolHolderSpec?: string; // 刀柄规格
-  magazineCount?: string; // 刀库数
-  zAxisTravel?: string; // New field: Z轴行程
-  spindleSpeed?: string; // New field: 主轴转速
+  // ERP / Order Details
+  projectName?: string; // 项目名称 (New)
+  issuanceRate?: string; // 发料率 (New)
   
-  holidayType: HolidayType; // New field: 假日别
+  clientName?: string; 
+  axisHead?: string; 
+  toolHolderSpec?: string; 
+  magazineCount?: string; 
+  zAxisTravel?: string; 
+  spindleSpeed?: string; 
+  
+  holidayType: HolidayType; 
 
-  stepStates: Record<string, StepState>; // New: Track status of each step independently
+  stepStates: Record<string, StepState>; 
 
   logs: StepLog[];
-  anomalies?: AnomalyRecord[]; // New field: 异常记录
+  anomalies?: AnomalyRecord[]; 
 }
 
 export interface AppState {
@@ -115,7 +118,6 @@ export interface AppState {
   currentUser: string;
 }
 
-// Define Prop Types for DB Components ensuring Async support
 export interface ModelDatabaseProps {
   models: MachineModel[];
   onAddModel: (model: MachineModel) => Promise<void>;

@@ -46,7 +46,7 @@ export const UserDatabase: React.FC = () => {
         setName('');
         setRole(UserRole.OPERATOR);
         setDepartment('');
-        setAllowedViews(['DASHBOARD', 'WORKSTATION']); // Default
+        setAllowedViews(['DASHBOARD', 'WORK_SCHEDULE']); // Default
     };
 
     const handleEdit = (user: AppUser) => {
@@ -168,6 +168,7 @@ export const UserDatabase: React.FC = () => {
     // Permission Dictionary
     const PERMISSIONS: { id: View; label: string; desc: string }[] = [
         { id: 'DASHBOARD', label: '运营总览', desc: '查看工厂KPI和生产进度' },
+        { id: 'WORK_SCHEDULE', label: '工作日排程', desc: '唯读模式: 僅供生產人員查看進度' },
         { id: 'WORKSTATION', label: '工作站', desc: '执行工序、查看图纸、报工' },
         { id: 'ANOMALY_LIST', label: '异常监控', desc: '全厂异常清单与筛选' },
         { id: 'REPORT_DOWNLOAD', label: '报表中心', desc: '导出工单、异常及日志报表' },
@@ -264,7 +265,6 @@ export const UserDatabase: React.FC = () => {
 
                 {/* Edit/Create Form */}
                 <div className={`bg-cyber-card border border-cyber-blue/30 p-6 relative shadow-lg transition-all ${isEditing ? 'opacity-100 translate-x-0' : 'opacity-50 pointer-events-none'}`}>
-                     {/* Tech Corners */}
                     <div className="absolute top-0 left-0 w-3 h-3 border-l border-t border-cyber-blue"></div>
                     <div className="absolute top-0 right-0 w-3 h-3 border-r border-t border-cyber-blue"></div>
                     <div className="absolute bottom-0 left-0 w-3 h-3 border-l border-b border-cyber-blue"></div>
@@ -293,7 +293,6 @@ export const UserDatabase: React.FC = () => {
                             />
                         </div>
 
-                        {/* Password Section */}
                         {editId && (
                             <div>
                                 <label className="block text-xs font-mono text-cyber-blue mb-2">当前密码 (只读)</label>
@@ -352,7 +351,6 @@ export const UserDatabase: React.FC = () => {
                             </select>
                         </div>
 
-                        {/* Permission Checkboxes */}
                         <div className="pt-2">
                              <div className="flex justify-between items-end border-b border-cyber-muted/20 pb-1 mb-3">
                                  <label className="text-xs font-mono text-cyber-orange">

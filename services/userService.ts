@@ -6,13 +6,13 @@ import { AppUser, UserRole, View } from "../types";
 const getDefaultViews = (role: UserRole): View[] => {
     switch (role) {
         case UserRole.ADMIN:
-            return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST', 'REPORT_DOWNLOAD', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB', 'USER_DB'];
+            return ['DASHBOARD', 'WORKSTATION', 'WORK_SCHEDULE', 'ANOMALY_LIST', 'REPORT_DOWNLOAD', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB', 'USER_DB'];
         case UserRole.MANAGER:
-            return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST', 'REPORT_DOWNLOAD', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB'];
+            return ['DASHBOARD', 'WORKSTATION', 'WORK_SCHEDULE', 'ANOMALY_LIST', 'REPORT_DOWNLOAD', 'ORDER_DB', 'MODEL_DB', 'HOLIDAY_DB'];
         case UserRole.OPERATOR:
-            return ['DASHBOARD', 'WORKSTATION', 'ANOMALY_LIST'];
+            return ['DASHBOARD', 'WORK_SCHEDULE', 'WORKSTATION', 'ANOMALY_LIST'];
         default:
-            return ['DASHBOARD'];
+            return ['DASHBOARD', 'WORK_SCHEDULE'];
     }
 };
 
@@ -185,7 +185,7 @@ export const userService = {
         // If count is 0, it means no rows were deleted. 
         // This usually happens if the ID doesn't exist OR RLS policy blocked the delete silently.
         if (count === null || count === 0) {
-            throw new Error("删除失败：数据库未受影响。请检查用户是否存在，或是否具有删除权限 (RLS Policy)。");
+            throw new Error("删除失败：数据库未受影響。请检查用户是否存在，或是否具有删除权限 (RLS Policy)。");
         }
     }
 };

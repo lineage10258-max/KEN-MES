@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepStatusEnum, StepState, AnomalyRecord, HolidayRule, HolidayType } from '../types';
 import { calculateProjectedDate, isWorkingDay, DEFAULT_HOLIDAY_RULES } from '../services/holidayService';
-import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table, Ban } from 'lucide-react';
+import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table, Ban, Eye, Lock } from 'lucide-react';
 
 interface WorkstationProps {
   orders: WorkOrder[];
@@ -11,9 +11,10 @@ interface WorkstationProps {
   onUpdateStepStatus: (orderId: string, stepId: string, status: StepStatusEnum) => void;
   onStatusChange: (orderId: string, status: MachineStatus) => void;
   onAddAnomaly: (orderId: string, anomaly: AnomalyRecord) => void;
+  isReadOnly?: boolean; 
 }
 
-export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holidayRules = DEFAULT_HOLIDAY_RULES, onUpdateStepStatus, onStatusChange, onAddAnomaly }) => {
+export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holidayRules = DEFAULT_HOLIDAY_RULES, onUpdateStepStatus, onStatusChange, onAddAnomaly, isReadOnly = false }) => {
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   
   // Step Interaction State
@@ -38,34 +39,23 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       durationDays: '0'
   });
   
-  // Logic Change: Use expandedModules to default to collapsed (false)
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
-  
-  // New Collapsed State for Anomalies
   const [isAnomaliesCollapsed, setIsAnomaliesCollapsed] = useState(false);
 
   // Filter States
   const [workshopTab, setWorkshopTab] = useState<'ALL' | 'K1' | 'K2' | 'K3'>('ALL');
   const [statusTab, setStatusTab] = useState<'ALL' | MachineStatus>(MachineStatus.IN_PROGRESS);
 
-  // Filter Logic & Sort Logic (By Business Closing Date Ascending)
   const filteredOrders = orders.filter(o => {
-      // 1. Workshop Filter
       const matchWorkshop = workshopTab === 'ALL' || (o.workshop?.startsWith(workshopTab) ?? false);
-      
-      // 2. Status Filter
       const matchStatus = statusTab === 'ALL' || o.status === statusTab;
-
       return matchWorkshop && matchStatus;
   }).sort((a, b) => {
-      // Sort by Business Closing Date (Ascending)
       const dateA = a.businessClosingDate ? new Date(a.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
       const dateB = b.businessClosingDate ? new Date(b.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
-      
       return dateA - dateB;
   });
 
-  // Helper to count orders for status tabs
   const getStatusCount = (key: 'ALL' | MachineStatus) => {
       return orders.filter(o => {
           const matchWorkshop = workshopTab === 'ALL' || (o.workshop?.startsWith(workshopTab) ?? false);
@@ -77,23 +67,19 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
   const selectedModel = selectedOrder ? models.find(m => m.id === selectedOrder.modelId) : null;
 
-  // Helper to group steps by Parallel Module
   const getGroupedSteps = () => {
       if (!selectedModel) return {};
       const groups: Record<string, (ProcessStep & { index: number })[]> = {};
-      
       selectedModel.steps.forEach((step, index) => {
           const pMod = step.parallelModule || '通用工序';
           if (!groups[pMod]) groups[pMod] = [];
           groups[pMod].push({ ...step, index });
       });
-      
       const sortedKeys = Object.keys(groups).sort((a, b) => {
           const diff = groups[a].length - groups[b].length;
           if (diff !== 0) return diff;
           return a.localeCompare(b);
       });
-
       return sortedKeys.reduce((acc, key) => {
           acc[key] = groups[key];
           return acc;
@@ -102,16 +88,13 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
 
   const groupedSteps = getGroupedSteps();
 
-  // Helper function to calculate real-time projected date and variance (Shared Logic)
   const calculateOrderMetrics = (order: WorkOrder) => {
       const model = models.find(m => m.id === order.modelId);
       if (!model) return { variance: 0, projectedDate: new Date(), closingDate: null };
 
-      // 1. Calculate remaining hours based on uncompleted steps
       let remainingHours = 0;
       const getRemainingHoursForStep = (s: ProcessStep) => {
           const status = order.stepStates?.[s.id]?.status;
-          // IGNORED/SKIPPED steps also count as done (0 hours remaining)
           const isDone = status === 'COMPLETED' || status === 'SKIPPED';
           return isDone ? 0 : s.estimatedHours;
       };
@@ -129,28 +112,20 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
           remainingHours = Math.max(0, ...Object.values(moduleRemaining));
       }
 
-      // 2. Project Date
       const now = new Date();
       const holidayType = order.holidayType || 'DOUBLE';
       const projected = calculateProjectedDate(now, remainingHours, holidayType);
-
-      // 3. Variance (Normalize to midnight for accurate day diff)
       const closing = order.businessClosingDate ? new Date(order.businessClosingDate) : null;
       let variance = 0;
       if (closing) {
-          const p = new Date(projected);
-          p.setHours(0,0,0,0);
-          const c = new Date(closing);
-          c.setHours(0,0,0,0);
-          
+          const p = new Date(projected); p.setHours(0,0,0,0);
+          const c = new Date(closing); c.setHours(0,0,0,0);
           const diff = p.getTime() - c.getTime();
           variance = Math.ceil(diff / (1000 * 60 * 60 * 24));
       }
-
       return { variance, projectedDate: projected, closingDate: closing };
   };
 
-  // Step Action Logic
   const handleStepClick = (step: ProcessStep) => {
       if (!selectedOrder) return;
       setSelectedStep(step);
@@ -161,6 +136,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   };
 
   const handleUpdateCurrentStepStatus = (status: StepStatusEnum) => {
+      if (isReadOnly) return;
       if (selectedOrder && selectedStep) {
           onUpdateStepStatus(selectedOrder.id, selectedStep.id, status);
           handleCloseModal();
@@ -168,6 +144,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   };
 
   const handleStartOrder = (id: string) => {
+    if (isReadOnly) return;
     onStatusChange(id, MachineStatus.IN_PROGRESS);
     setSelectedOrderId(id);
   }
@@ -179,53 +156,39 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
     }));
   };
   
-  // Anomaly Logic
   const calculateDuration = () => {
       if (newAnomaly.startTime && newAnomaly.endTime) {
           const start = new Date(newAnomaly.startTime);
           const end = new Date(newAnomaly.endTime);
-
           if (start >= end) {
               setNewAnomaly(prev => ({ ...prev, durationDays: '0' }));
               return;
           }
-
           const WORK_START_HOUR = 8;
           const WORK_START_MIN = 30;
           const WORK_END_HOUR = 17;
           const WORK_END_MIN = 30;
           const HOURS_PER_DAY = 9; 
-
           let totalMilliseconds = 0;
-          
           const current = new Date(start);
           current.setHours(0,0,0,0);
-          
           const endDateMidnight = new Date(end);
           endDateMidnight.setHours(0,0,0,0);
-
           while (current <= endDateMidnight) {
               const shiftStart = new Date(current);
               shiftStart.setHours(WORK_START_HOUR, WORK_START_MIN, 0, 0);
-
               const shiftEnd = new Date(current);
               shiftEnd.setHours(WORK_END_HOUR, WORK_END_MIN, 0, 0);
-
               const overlapStart = start > shiftStart ? start : shiftStart;
               const overlapEnd = end < shiftEnd ? end : shiftEnd;
-
               if (overlapStart < overlapEnd) {
                   totalMilliseconds += overlapEnd.getTime() - overlapStart.getTime();
               }
-
               current.setDate(current.getDate() + 1);
           }
-
           const totalHours = totalMilliseconds / (1000 * 60 * 60);
           const totalDays = totalHours / HOURS_PER_DAY;
-          
           const formattedDays = parseFloat(totalDays.toFixed(1)).toString();
-
           setNewAnomaly(prev => ({ ...prev, durationDays: formattedDays }));
       } else {
           setNewAnomaly(prev => ({ ...prev, durationDays: '0' }));
@@ -244,10 +207,9 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   };
 
   const handleOpenAnomalyModal = () => {
+    if (isReadOnly) return;
     setNewAnomaly({
-        stepName: '',
-        reason: '',
-        department: '',
+        stepName: '', reason: '', department: '',
         startTime: getDefaultTimeStr(8, 30),
         endTime: getDefaultTimeStr(17, 30),
         durationDays: '0'
@@ -257,11 +219,11 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   };
 
   const handleSaveAnomaly = () => {
+      if (isReadOnly) return;
       if (!selectedOrderId || !newAnomaly.stepName || !newAnomaly.reason || !newAnomaly.startTime) {
           alert("请填写必要信息");
           return;
       }
-      
       const record: AnomalyRecord = {
           id: crypto.randomUUID(), 
           stepName: newAnomaly.stepName,
@@ -272,26 +234,14 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
           durationDays: newAnomaly.durationDays,
           reportedAt: new Date().toISOString()
       };
-      
       onAddAnomaly(selectedOrderId, record);
       setShowAnomalyModal(false);
-      setNewAnomaly({
-          stepName: '',
-          reason: '',
-          department: '',
-          startTime: '',
-          endTime: '',
-          durationDays: '0'
-      });
   };
 
-
-  // Stats for the selected order
   const completedStepsCount = selectedOrder ? Object.values(selectedOrder.stepStates || {}).filter((s: StepState) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length : 0;
   const totalSteps = selectedModel?.steps.length || 1;
   const progressPercentage = Math.round((completedStepsCount / totalSteps) * 100);
 
-  // --- Date & Variance Calculations for Detail View ---
   const dateMetrics = useMemo(() => {
     if (!selectedOrder) return null;
     const m = calculateOrderMetrics(selectedOrder);
@@ -300,19 +250,15 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
         projectedDate: m.projectedDate,
         closingDate: m.closingDate,
         varianceDays: m.variance,
-        materialRate: '60%' 
+        materialRate: selectedOrder.issuanceRate || '0%' 
     };
   }, [selectedOrder, models]);
 
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full relative">
-      
-      {/* Modal / Dialog for Step Action */}
       {selectedStep && selectedOrder && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
               <div className="bg-cyber-card border border-cyber-blue shadow-neon-blue max-w-lg w-full relative">
-                  {/* Decorative Header */}
                   <div className="bg-cyber-blue/10 p-4 border-b border-cyber-blue/30 flex justify-between items-center">
                       <h3 className="text-xl font-bold text-white tracking-wider flex items-center gap-2">
                           <Layers size={20} className="text-cyber-blue"/> 
@@ -322,10 +268,8 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                           <X size={24} />
                       </button>
                   </div>
-
                   <div className="p-6">
                        <h2 className="text-2xl font-bold text-white mb-4">{selectedStep.name}</h2>
-                       
                        <div className="grid grid-cols-2 gap-4 mb-6 text-sm text-cyber-muted">
                            <div className="flex items-center gap-2 border border-cyber-muted/20 p-2 bg-cyber-bg/50">
                                <Clock size={16} className="text-cyber-orange"/>
@@ -336,219 +280,105 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                负责人: <span className="text-white">--</span>
                            </div>
                        </div>
-
-                       {/* Status Display in Modal */}
                        <div className="mb-8">
                            <div className="text-xs uppercase tracking-widest text-cyber-muted mb-2">当前状态</div>
                            {(() => {
                                const status = selectedOrder.stepStates?.[selectedStep.id]?.status || 'PENDING';
-                               if (status === 'COMPLETED') {
-                                   return <div className="text-green-400 font-bold border border-green-500/30 bg-green-500/10 p-3 text-center flex items-center justify-center gap-2"><CheckCircle/> 已完工</div>
-                               } else if (status === 'SKIPPED') {
-                                   return <div className="text-cyber-orange font-bold border border-cyber-orange/30 bg-cyber-orange/10 p-3 text-center flex items-center justify-center gap-2 opacity-80"><Ban size={18}/> ⛔ 已忽略</div>
-                               } else if (status === 'IN_PROGRESS') {
-                                   return <div className="text-cyber-blue font-bold border border-cyber-blue/30 bg-cyber-blue/10 p-3 text-center flex items-center justify-center gap-2 animate-pulse"><Activity/> 正在进行中...</div>
-                               } else {
-                                   return <div className="text-cyber-muted font-bold border border-cyber-muted/30 bg-cyber-bg/50 p-3 text-center">待开工</div>
-                               }
+                               if (status === 'COMPLETED') return <div className="text-green-400 font-bold border border-green-500/30 bg-green-500/10 p-3 text-center flex items-center justify-center gap-2"><CheckCircle/> 已完工</div>
+                               if (status === 'SKIPPED') return <div className="text-cyber-orange font-bold border border-cyber-orange/30 bg-cyber-orange/10 p-3 text-center flex items-center justify-center gap-2 opacity-80"><Ban size={18}/> ⛔ 已忽略</div>
+                               if (status === 'IN_PROGRESS') return <div className="text-cyber-blue font-bold border border-cyber-blue/30 bg-cyber-blue/10 p-3 text-center flex items-center justify-center gap-2 animate-pulse"><Activity/> 正在进行中...</div>
+                               return <div className="text-cyber-muted font-bold border border-cyber-muted/30 bg-cyber-bg/50 p-3 text-center">待开工</div>
                            })()}
                        </div>
-
-                       {/* Action Buttons */}
-                       <div className="flex gap-4">
-                           {(!selectedOrder.stepStates?.[selectedStep.id] || selectedOrder.stepStates?.[selectedStep.id]?.status === 'PENDING') && (
-                               <>
-                                   <button 
-                                       onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')}
-                                       className="flex-1 bg-cyber-blue hover:bg-white text-black font-bold py-3 px-4 shadow-neon-blue transition-all flex items-center justify-center gap-2"
-                                   >
-                                       <Play size={18} fill="currentColor" /> 开始作业
-                                   </button>
-                                   
-                                   <button 
-                                       onClick={() => handleUpdateCurrentStepStatus('SKIPPED')}
-                                       className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:bg-cyber-muted hover:text-white font-bold py-3 px-4 transition-all flex items-center justify-center gap-2"
-                                       title="忽略此作业，将剩余工时设为0以满足出货需求"
-                                   >
-                                       <Ban size={18} /> 忽略作业
-                                   </button>
-                               </>
-                           )}
-
-                           {selectedOrder.stepStates?.[selectedStep.id]?.status === 'IN_PROGRESS' && (
+                       
+                       {!isReadOnly ? (
+                        <div className="flex gap-4">
+                            {(!selectedOrder.stepStates?.[selectedStep.id] || selectedOrder.stepStates?.[selectedStep.id]?.status === 'PENDING') && (
                                 <>
-                                    <button 
-                                        onClick={() => handleUpdateCurrentStepStatus('PENDING')}
-                                        className="flex-1 bg-transparent border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black font-bold py-3 px-4 shadow-[0_0_10px_rgba(255,136,0,0.3)] transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <RotateCcw size={18} /> 退回待开工
-                                    </button>
-                                    <button 
-                                        onClick={() => handleUpdateCurrentStepStatus('COMPLETED')}
-                                        className="flex-1 bg-green-500 hover:bg-green-400 text-black font-bold py-3 px-4 shadow-[0_0_15px_rgba(34,197,94,0.5)] transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <CheckCircle size={18} /> 确认完工
-                                    </button>
+                                    <button onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')} className="flex-1 bg-cyber-blue hover:bg-white text-black font-bold py-3 px-4 shadow-neon-blue transition-all flex items-center justify-center gap-2"><Play size={18} fill="currentColor" /> 开始作业</button>
+                                    <button onClick={() => handleUpdateCurrentStepStatus('SKIPPED')} className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:bg-cyber-muted hover:text-white font-bold py-3 px-4 transition-all flex items-center justify-center gap-2" title="忽略此作业，將剩餘工時設為0以滿足出貨需求"><Ban size={18} /> 忽略作业</button>
                                 </>
-                           )}
-
-                           {(selectedOrder.stepStates?.[selectedStep.id]?.status === 'COMPLETED' || selectedOrder.stepStates?.[selectedStep.id]?.status === 'SKIPPED') && (
-                                <button 
-                                   onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')}
-                                   className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:text-white hover:border-white py-3 px-4 transition-all"
-                               >
-                                   重置为进行中 (返工)
-                               </button>
-                           )}
-                       </div>
+                            )}
+                            {selectedOrder.stepStates?.[selectedStep.id]?.status === 'IN_PROGRESS' && (
+                                    <>
+                                        <button onClick={() => handleUpdateCurrentStepStatus('PENDING')} className="flex-1 bg-transparent border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black font-bold py-3 px-4 shadow-[0_0_10px_rgba(255,136,0,0.3)] transition-all flex items-center justify-center gap-2"><RotateCcw size={18} /> 退回待开工</button>
+                                        <button onClick={() => handleUpdateCurrentStepStatus('COMPLETED')} className="flex-1 bg-green-500 hover:bg-green-400 text-black font-bold py-3 px-4 shadow-[0_0_15px_rgba(34,197,94,0.5)] transition-all flex items-center justify-center gap-2"><CheckCircle size={18} /> 确认完工</button>
+                                    </>
+                            )}
+                            {(selectedOrder.stepStates?.[selectedStep.id]?.status === 'COMPLETED' || selectedOrder.stepStates?.[selectedStep.id]?.status === 'SKIPPED') && (
+                                    <button onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')} className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:text-white hover:border-white py-3 px-4 transition-all">重置为进行中 (返工)</button>
+                            )}
+                        </div>
+                       ) : (
+                           <div className="text-center p-4 border border-cyber-muted/20 bg-cyber-bg/50 text-cyber-muted text-xs uppercase tracking-widest flex items-center justify-center gap-2">
+                               <Lock size={14} className="text-cyber-orange" /> 唯读看板: 仅供进度查看
+                           </div>
+                       )}
                   </div>
               </div>
           </div>
       )}
       
-      {/* Anomaly Modal */}
-      {showAnomalyModal && (
+      {showAnomalyModal && !isReadOnly && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
               <div className="bg-cyber-card border border-cyber-orange shadow-neon-orange max-w-lg w-full relative">
                   <div className="bg-cyber-orange/10 p-4 border-b border-cyber-orange/30 flex justify-between items-center">
-                      <h3 className="text-xl font-bold text-white tracking-wider flex items-center gap-2">
-                          <AlertTriangle size={20} className="text-cyber-orange"/> 
-                          新增异常反馈
-                      </h3>
-                      <button onClick={() => setShowAnomalyModal(false)} className="text-cyber-muted hover:text-white transition-colors">
-                          <X size={24} />
-                      </button>
+                      <h3 className="text-xl font-bold text-white tracking-wider flex items-center gap-2"><AlertTriangle size={20} className="text-cyber-orange"/> 新增异常反馈</h3>
+                      <button onClick={() => setShowAnomalyModal(false)} className="text-cyber-muted hover:text-white transition-colors"><X size={24} /></button>
                   </div>
-                  
                   <div className="p-6 space-y-4">
                       <div>
                           <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">关联工序名称</label>
-                          
-                          {/* Search Step Input */}
                           <div className="relative mb-1 group">
                              <Search className="absolute left-2 top-2.5 text-cyber-muted group-focus-within:text-cyber-orange transition-colors" size={14} />
-                             <input 
-                                 type="text"
-                                 value={stepSearchTerm}
-                                 onChange={(e) => setStepSearchTerm(e.target.value)}
-                                 placeholder="搜索工序..."
-                                 className="w-full bg-cyber-bg border border-cyber-muted/40 pl-8 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm transition-all"
-                             />
+                             <input type="text" value={stepSearchTerm} onChange={(e) => setStepSearchTerm(e.target.value)} placeholder="搜索工序..." className="w-full bg-cyber-bg border border-cyber-muted/40 pl-8 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm transition-all"/>
                           </div>
-
-                          <select 
-                             value={newAnomaly.stepName}
-                             onChange={(e) => setNewAnomaly({...newAnomaly, stepName: e.target.value})}
-                             className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
-                          >
+                          <select value={newAnomaly.stepName} onChange={(e) => setNewAnomaly({...newAnomaly, stepName: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm">
                               <option value="">-- 请选择工序 --</option>
-                              {selectedModel?.steps
-                                  .filter(s => s.name.toLowerCase().includes(stepSearchTerm.toLowerCase()))
-                                  .map(s => (
+                              {selectedModel?.steps.filter(s => s.name.toLowerCase().includes(stepSearchTerm.toLowerCase())).map(s => (
                                   <option key={s.id} value={s.name}>{s.name} ({s.parallelModule})</option>
                               ))}
                               <option value="OTHER">其他/整机</option>
                           </select>
                       </div>
-
                       <div>
                           <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">异常原因描述</label>
-                          <textarea 
-                              value={newAnomaly.reason}
-                              onChange={(e) => setNewAnomaly({...newAnomaly, reason: e.target.value})}
-                              rows={3}
-                              placeholder="请详细描述异常情况..."
-                              className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
-                          />
+                          <textarea value={newAnomaly.reason} onChange={(e) => setNewAnomaly({...newAnomaly, reason: e.target.value})} rows={3} placeholder="请详细描述异常情况..." className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"/>
                       </div>
-                      
                       <div>
                           <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">责任单位</label>
-                          <select 
-                                value={newAnomaly.department}
-                                onChange={(e) => setNewAnomaly({...newAnomaly, department: e.target.value})}
-                                className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
-                            >
+                          <select value={newAnomaly.department} onChange={(e) => setNewAnomaly({...newAnomaly, department: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm">
                                 <option value="">-- 请选择部门 --</option>
-                                <option value="生产">生产</option>
-                                <option value="品管">品管</option>
-                                <option value="电控">电控</option>
-                                <option value="KA">KA</option>
-                                <option value="应用">应用</option>
-                                <option value="采购">采购</option>
-                                <option value="生管">生管</option>
-                                <option value="仓库">仓库</option>
-                                <option value="设计">设计</option>
-                                <option value="业务">业务</option>
-                                <option value="其他">其他</option>
+                                <option value="生产">生产</option><option value="品管">品管</option><option value="电控">电控</option><option value="KA">KA</option><option value="应用">应用</option><option value="采购">采购</option><option value="生管">生管</option><option value="仓库">仓库</option><option value="设计">设计</option><option value="业务">业务</option><option value="其他">其他</option>
                             </select>
                       </div>
-                      
                       <div className="grid grid-cols-2 gap-4">
-                          <div>
-                              <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">发生时间</label>
-                              <input 
-                                  type="datetime-local"
-                                  value={newAnomaly.startTime}
-                                  onChange={(e) => setNewAnomaly({...newAnomaly, startTime: e.target.value})}
-                                  className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
-                              />
-                          </div>
-                          <div>
-                              <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">结束时间</label>
-                              <input 
-                                  type="datetime-local"
-                                  value={newAnomaly.endTime}
-                                  onChange={(e) => setNewAnomaly({...newAnomaly, endTime: e.target.value})}
-                                  className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
-                              />
-                          </div>
+                          <div><label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">发生时间</label><input type="datetime-local" value={newAnomaly.startTime} onChange={(e) => setNewAnomaly({...newAnomaly, startTime: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"/></div>
+                          <div><label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">结束时间</label><input type="datetime-local" value={newAnomaly.endTime} onChange={(e) => setNewAnomaly({...newAnomaly, endTime: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"/></div>
                       </div>
-                      
                       <div className="bg-cyber-bg/50 p-3 border border-cyber-muted/20 flex justify-between items-center">
                           <span className="text-xs text-cyber-muted uppercase">自动计算异常天数 (8:30-17:30)</span>
                           <span className="text-lg font-bold text-cyber-orange">{newAnomaly.durationDays} 天</span>
                       </div>
-                      
-                      <button 
-                          onClick={handleSaveAnomaly}
-                          className="w-full bg-cyber-orange hover:bg-white text-black font-bold py-3 px-4 shadow-neon-orange transition-all flex items-center justify-center gap-2 mt-4"
-                      >
-                          <Save size={18} /> 提交异常记录
-                      </button>
+                      <button onClick={handleSaveAnomaly} className="w-full bg-cyber-orange hover:bg-white text-black font-bold py-3 px-4 shadow-neon-orange transition-all flex items-center justify-center gap-2 mt-4"><Save size={18} /> 提交异常记录</button>
                   </div>
               </div>
           </div>
       )}
 
-      {/* Selection Column (Left) */}
       <div className="lg:col-span-1 flex flex-col h-[calc(100vh-140px)]">
-        
-        {/* Header & Workshop Tabs */}
         <div className="flex flex-col gap-3 mb-4">
             <div className="flex justify-between items-end border-b border-cyber-blue/30 pb-2">
                 <h2 className="font-bold text-cyber-blue text-lg tracking-wide uppercase flex items-center gap-2">
-                    选择机台
+                    {isReadOnly ? <Activity size={18} className="text-green-400" /> : <Settings size={18} />}
+                    {isReadOnly ? '生产进度看板' : '選擇機台'}
                 </h2>
-                {/* Workshop Filter Tabs */}
                 <div className="flex gap-1">
                     {['ALL', 'K1', 'K2', 'K3'].map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setWorkshopTab(tab as any)}
-                            className={`text-[10px] px-2 py-1 transition-colors rounded-t ${
-                                workshopTab === tab 
-                                ? 'bg-cyber-blue text-black font-bold' 
-                                : 'text-cyber-muted hover:text-white bg-cyber-bg/50'
-                            }`}
-                        >
-                            {tab === 'ALL' ? '总览' : tab}
-                        </button>
+                        <button key={tab} onClick={() => setWorkshopTab(tab as any)} className={`text-[10px] px-2 py-1 transition-colors rounded-t ${workshopTab === tab ? 'bg-cyber-blue text-black font-bold' : 'text-cyber-muted hover:text-white bg-cyber-bg/50'}`}>{tab === 'ALL' ? '总览' : tab}</button>
                     ))}
                 </div>
             </div>
-
-            {/* Status Filter Tabs */}
             <div className="flex gap-2 bg-cyber-card/50 p-1 rounded border border-cyber-muted/20">
                 {[
                     { key: 'ALL', label: '全部' },
@@ -556,116 +386,35 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                     { key: MachineStatus.PLANNED, label: '排隊中' },
                     { key: MachineStatus.COMPLETED, label: '已完成' },
                 ].map((status) => (
-                    <button
-                        key={status.key}
-                        onClick={() => setStatusTab(status.key as any)}
-                        className={`flex-1 text-[10px] py-1.5 text-center transition-all rounded ${
-                            statusTab === status.key
-                            ? 'bg-cyber-blue/20 text-cyber-blue shadow-neon-blue border border-cyber-blue/30'
-                            : 'text-cyber-muted hover:text-white hover:bg-white/5'
-                        }`}
-                    >
-                        {status.label} <span className="opacity-80 font-mono">({getStatusCount(status.key as any)}台)</span>
-                    </button>
+                    <button key={status.key} onClick={() => setStatusTab(status.key as any)} className={`flex-1 text-[10px] py-1.5 text-center transition-all rounded ${statusTab === status.key ? 'bg-cyber-blue/20 text-cyber-blue shadow-neon-blue border border-cyber-blue/30' : 'text-cyber-muted hover:text-white hover:bg-white/5'}`}>{status.label} <span className="opacity-80 font-mono">({getStatusCount(status.key as any)}台)</span></button>
                 ))}
             </div>
         </div>
-
-        {/* Machine List - Refactored Structure for Corners */}
         <div className="bg-cyber-card rounded-none shadow-sm border border-cyber-blue/30 flex-1 relative flex flex-col min-h-0 overflow-hidden">
-             
-             {/* Tech Corners - Fixed to frame, Larger Size */}
              <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-cyber-blue z-20 pointer-events-none"></div>
              <div className="absolute top-0 right-0 w-6 h-6 border-r-2 border-t-2 border-cyber-blue z-20 pointer-events-none"></div>
-
              <div className="overflow-y-auto custom-scrollbar flex-1">
                 {filteredOrders.length === 0 ? (
-                    <div className="p-8 text-center flex flex-col items-center justify-center h-full text-cyber-muted opacity-60">
-                        <Filter size={32} className="mb-2" />
-                        <p className="text-sm">无符合条件的机台</p>
-                    </div>
+                    <div className="p-8 text-center flex flex-col items-center justify-center h-full text-cyber-muted opacity-60"><Filter size={32} className="mb-2" /><p className="text-sm">无符合条件的机台</p></div>
                 ) : (
                     filteredOrders.map(order => {
-                        // Use shared logic for consistent calculation in List & Detail
                         const { variance, projectedDate, closingDate } = calculateOrderMetrics(order);
                         const modelName = models.find(m => m.id === order.modelId)?.name.split(' ')[0] || '';
-
                         return (
-                            <button
-                                key={order.id}
-                                onClick={() => setSelectedOrderId(order.id)}
-                                className={`w-full text-left p-4 border-b border-cyber-muted/10 hover:bg-cyber-blue/5 transition-all focus:outline-none group relative ${
-                                    selectedOrderId === order.id 
-                                    ? 'bg-gradient-to-r from-cyber-blue/10 to-transparent border-l-4 border-l-cyber-blue' 
-                                    : 'border-l-4 border-l-transparent'
-                                }`}
-                            >
+                            <button key={order.id} onClick={() => setSelectedOrderId(order.id)} className={`w-full text-left p-4 border-b border-cyber-muted/10 hover:bg-cyber-blue/5 transition-all focus:outline-none group relative ${selectedOrderId === order.id ? 'bg-gradient-to-r from-cyber-blue/10 to-transparent border-l-4 border-l-cyber-blue' : 'border-l-4 border-l-transparent'}`}>
                                 <div className="flex justify-between items-start">
-                                    {/* LEFT SIDE: ID, Z-Axis, Model, Workshop */}
                                     <div className="flex flex-col items-start gap-1">
-                                        {/* Row 1: ID Only (Removed Z-Axis) */}
-                                        <div className="flex items-baseline gap-1">
-                                            <span className={`font-bold text-sm tracking-wide ${selectedOrderId === order.id ? 'text-white' : 'text-cyber-muted group-hover:text-white'}`}>
-                                                {order.id}
-                                            </span>
-                                        </div>
-                                    
-                                        {/* Row 2: Model + Workshop */}
-                                        <div className="flex items-center gap-2 text-[10px]">
-                                            <span className={`font-medium ${selectedOrderId === order.id ? 'text-cyber-blue' : 'text-cyber-muted opacity-80'}`}>
-                                                {modelName}
-                                            </span>
-                                            <span className="text-cyber-muted/30">|</span>
-                                            <span className={`${selectedOrderId === order.id ? 'text-white/50' : 'text-cyber-muted/50'}`}>
-                                                {order.workshop}
-                                            </span>
-                                        </div>
+                                        <div className="flex items-baseline gap-1"><span className={`font-bold text-sm tracking-wide ${selectedOrderId === order.id ? 'text-white' : 'text-cyber-muted group-hover:text-white'}`}>{order.id}</span></div>
+                                        <div className="flex items-center gap-2 text-[10px]"><span className={`font-medium ${selectedOrderId === order.id ? 'text-cyber-blue' : 'text-cyber-muted opacity-80'}`}>{modelName}</span><span className="text-cyber-muted/30">|</span><span className={`${selectedOrderId === order.id ? 'text-white/50' : 'text-cyber-muted/50'}`}>{order.workshop}</span></div>
                                     </div>
-
-                                    {/* RIGHT SIDE: Metrics & Status - Force Right Align */}
                                     <div className="flex flex-col items-end gap-1 ml-auto">
                                         <div className="flex items-center gap-2 justify-end">
-                                            {/* Metrics Boxes - Enlarged and Right Aligned */}
                                             <div className="flex gap-1 justify-end">
-                                                {/* Variance Box - ALWAYS SHOW, EVEN IF 0 */}
-                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${
-                                                    variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'
-                                                }`}>
-                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span>
-                                                    <div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
-                                                        {variance > 0 && <AlertTriangle size={8}/>}
-                                                        {variance > 0 ? `+${variance}` : variance}
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* Planned Box (Dynamic) */}
-                                                <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">完工</span>
-                                                    <span className="text-xs font-bold text-cyber-blue leading-none">
-                                                        {projectedDate.getMonth() + 1}/{projectedDate.getDate()}
-                                                    </span>
-                                                </div>
-
-                                                {/* Closing Box */}
-                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${
-                                                    variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'
-                                                }`}>
-                                                    <span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">结关</span>
-                                                    <span className={`text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-cyber-muted'}`}>
-                                                        {closingDate ? `${closingDate.getMonth() + 1}/${closingDate.getDate()}` : '-'}
-                                                    </span>
-                                                </div>
+                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'}`}><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span><div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>{variance > 0 && <AlertTriangle size={8}/>}{variance > 0 ? `+${variance}` : variance}</div></div>
+                                                <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]"><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">完工</span><span className="text-xs font-bold text-cyber-blue leading-none">{projectedDate.getMonth() + 1}/{projectedDate.getDate()}</span></div>
+                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'}`}><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">结关</span><span className={`text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-cyber-muted'}`}>{closingDate ? `${closingDate.getMonth() + 1}/${closingDate.getDate()}` : '-'}</span></div>
                                             </div>
-
-                                            {/* Status Badge */}
-                                            <span className={`h-10 flex items-center justify-center px-2 text-[10px] rounded uppercase border flex-shrink-0 ${
-                                                order.status === MachineStatus.IN_PROGRESS ? 'border-cyber-blue/40 text-cyber-blue' :
-                                                order.status === MachineStatus.PLANNED ? 'border-cyber-orange/40 text-cyber-orange' :
-                                                'border-green-500/40 text-green-500'
-                                            }`}>
-                                                {order.status === MachineStatus.IN_PROGRESS ? '进行中' : 
-                                                order.status === MachineStatus.PLANNED ? '排隊中' : '完成'}
-                                            </span>
+                                            <span className={`h-10 flex items-center justify-center px-2 text-[10px] rounded uppercase border flex-shrink-0 ${order.status === MachineStatus.IN_PROGRESS ? 'border-cyber-blue/40 text-cyber-blue' : order.status === MachineStatus.PLANNED ? 'border-cyber-orange/40 text-cyber-orange' : 'border-green-500/40 text-green-500'}`}>{order.status === MachineStatus.IN_PROGRESS ? '进行中' : order.status === MachineStatus.PLANNED ? '排隊中' : '完成'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -677,139 +426,45 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
         </div>
       </div>
 
-      {/* Action Area (Right - Spanning 3 cols now) */}
       <div className="lg:col-span-3 h-[calc(100vh-140px)]">
         {selectedOrder && selectedModel ? (
             <div className="bg-cyber-card rounded-none shadow-neon-blue border border-cyber-blue/50 h-full flex flex-col relative overflow-hidden animate-fade-in">
-                 {/* Background Tech Lines */}
                  <div className="absolute right-0 top-0 w-64 h-64 border-r border-t border-cyber-blue/10 opacity-30 rounded-tr-[100px] pointer-events-none"></div>
-
-                {/* Header Section */}
                 <div className="border-b border-cyber-blue/20 p-5 bg-cyber-bg/50 backdrop-blur-sm z-20">
                     <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
-                        {/* Left: Machine Info */}
                         <div className="min-w-[200px]">
                             <div className="flex items-center gap-3 mb-1">
                                  <h2 className="text-3xl font-bold text-white tracking-widest">{selectedOrder.id}</h2>
-                                 <span className="px-2 py-0.5 text-xs bg-cyber-bg border border-cyber-muted text-cyber-muted rounded">
-                                     {selectedOrder.workshop}
-                                 </span>
-                                 
-                                 {/* New Anomaly Button */}
-                                 <button 
-                                    onClick={handleOpenAnomalyModal}
-                                    className="ml-2 bg-cyber-orange/10 border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded flex items-center gap-1 transition-all shadow-neon-orange"
-                                 >
-                                     <Plus size={12}/> 新增异常
-                                 </button>
+                                 <span className="px-2 py-0.5 text-xs bg-cyber-bg border border-cyber-muted text-cyber-muted rounded">{selectedOrder.workshop}</span>
+                                 {!isReadOnly && (
+                                     <button onClick={handleOpenAnomalyModal} className="ml-2 bg-cyber-orange/10 border border-cyber-orange text-cyber-orange hover:bg-cyber-orange hover:text-black px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded flex items-center gap-1 transition-all shadow-neon-orange"><Plus size={12}/> 新增异常</button>
+                                 )}
                             </div>
-                            <div className="flex items-center gap-2">
-                                <p className="text-cyber-blue text-lg">{selectedModel.name}</p>
-                                <span className="text-[10px] text-cyber-orange border border-cyber-orange/30 px-1 rounded bg-cyber-orange/5">
-                                    {selectedOrder.holidayType === 'DOUBLE' ? '双休' : 
-                                     selectedOrder.holidayType === 'SINGLE' ? '单休' :
-                                     selectedOrder.holidayType === 'ALTERNATE' ? '隔周休' : '无休'}
-                                </span>
-                            </div>
+                            <div className="flex items-center gap-2"><p className="text-cyber-blue text-lg">{selectedModel.name}</p><span className="text-[10px] text-cyber-orange border border-cyber-orange/30 px-1 rounded bg-cyber-orange/5">{selectedOrder.holidayType === 'DOUBLE' ? '双休' : selectedOrder.holidayType === 'SINGLE' ? '单休' : selectedOrder.holidayType === 'ALTERNATE' ? '隔周休' : '无休'}</span></div>
                         </div>
-                        
-                        {/* Right: Metric Cards - Updated Visuals */}
                         {dateMetrics && (
                             <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 w-full xl:w-auto">
-                                {/* Card 1: Start Date */}
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
-                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">上线日</span>
-                                    <span className="text-sm font-bold text-white drop-shadow-md">
-                                        {dateMetrics.startDate ? `${dateMetrics.startDate.getMonth()+1}/${dateMetrics.startDate.getDate()}` : '--'}
-                                    </span>
-                                </div>
-
-                                {/* Card 2: Variance Days */}
-                                <div className={`bg-cyber-card/80 border p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-sm ${
-                                    dateMetrics.varianceDays > 0 ? 'border-cyber-orange/40 bg-cyber-orange/5' : 'border-green-500/40 bg-green-500/10'
-                                }`}>
-                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">差异天数</span>
-                                    <div className={`flex items-center gap-1 text-sm font-bold drop-shadow-md ${
-                                        dateMetrics.varianceDays > 0 ? 'text-cyber-orange' : 'text-green-400'
-                                    }`}>
-                                        {dateMetrics.varianceDays > 0 && <AlertTriangle size={12}/>}
-                                        {dateMetrics.varianceDays > 0 ? `+${dateMetrics.varianceDays}` : dateMetrics.varianceDays}
-                                    </div>
-                                </div>
-
-                                {/* Card 3: Projected Date */}
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
-                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产完工</span>
-                                    <span className="text-sm font-bold text-cyber-blue drop-shadow-md">
-                                        {dateMetrics.projectedDate.getMonth()+1}/{dateMetrics.projectedDate.getDate()}
-                                    </span>
-                                </div>
-
-                                {/* Card 4: Closing Date */}
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
-                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">业务结关</span>
-                                    <span className="text-sm font-bold text-white drop-shadow-md">
-                                        {dateMetrics.closingDate ? `${dateMetrics.closingDate.getMonth()+1}/${dateMetrics.closingDate.getDate()}` : '--'}
-                                    </span>
-                                </div>
-
-                                {/* Card 5: Material Rate */}
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
-                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">发料率</span>
-                                    <span className="text-sm font-bold text-white drop-shadow-md">
-                                        {dateMetrics.materialRate}
-                                    </span>
-                                </div>
-
-                                {/* Card 6: Production Progress */}
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]">
-                                    <span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产进度</span>
-                                    <span className={`text-sm font-bold drop-shadow-md ${progressPercentage === 100 ? 'text-green-400' : 'text-cyber-blue'}`}>
-                                        {progressPercentage}%
-                                    </span>
-                                </div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">上线日</span><span className="text-sm font-bold text-white drop-shadow-md">{dateMetrics.startDate ? `${dateMetrics.startDate.getMonth()+1}/${dateMetrics.startDate.getDate()}` : '--'}</span></div>
+                                <div className={`bg-cyber-card/80 border p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-sm ${dateMetrics.varianceDays > 0 ? 'border-cyber-orange/40 bg-cyber-orange/5' : 'border-green-500/40 bg-green-500/10'}`}><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">差异天数</span><div className={`flex items-center gap-1 text-sm font-bold drop-shadow-md ${dateMetrics.varianceDays > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>{dateMetrics.varianceDays > 0 && <AlertTriangle size={12}/>}{dateMetrics.varianceDays > 0 ? `+${dateMetrics.varianceDays}` : dateMetrics.varianceDays}</div></div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产完工</span><span className="text-sm font-bold text-cyber-blue drop-shadow-md">{dateMetrics.projectedDate.getMonth()+1}/${dateMetrics.projectedDate.getDate()}</span></div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">业务结关</span><span className="text-sm font-bold text-white drop-shadow-md">{dateMetrics.closingDate ? `${dateMetrics.closingDate.getMonth()+1}/${dateMetrics.closingDate.getDate()}` : '--'}</span></div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">发料率</span><span className="text-sm font-bold text-white drop-shadow-md">{dateMetrics.materialRate}</span></div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产进度</span><span className={`text-sm font-bold drop-shadow-md ${progressPercentage === 100 ? 'text-green-400' : 'text-cyber-blue'}`}>{progressPercentage}%</span></div>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* Main Content Area - Scrollable */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative z-10">
-                    
-                    {/* Anomaly Alert Section - Collapsible */}
                     {selectedOrder.anomalies && selectedOrder.anomalies.length > 0 && (
-                        <div className={`relative rounded-lg transition-all duration-300 mb-6 ${
-                            isAnomaliesCollapsed
-                            ? 'h-px bg-transparent border-0 border-t border-cyber-orange/30 mt-8'
-                            : 'p-4 pt-8 border border-cyber-orange/30 bg-cyber-orange/5 shadow-[0_0_15px_rgba(255,136,0,0.1)]'
-                        }`}>
-                            {/* Header Badge - Clickable to toggle */}
-                            <div 
-                                onClick={() => setIsAnomaliesCollapsed(!isAnomaliesCollapsed)}
-                                className="absolute -top-3 left-4 bg-cyber-card px-2 py-0.5 text-xs font-bold rounded uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all z-10 select-none shadow-[0_0_10px_rgba(0,0,0,0.5)] text-cyber-orange border border-cyber-orange hover:bg-cyber-orange hover:text-black"
-                            >
-                                <AlertTriangle size={12}/> 
-                                异常反馈 ({selectedOrder.anomalies.length})
-                                <div className="ml-2 pl-2 border-l border-cyber-orange/30 flex items-center">
-                                     {isAnomaliesCollapsed ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}
-                                </div>
-                            </div>
-
+                        <div className={`relative rounded-lg transition-all duration-300 mb-6 ${isAnomaliesCollapsed ? 'h-px bg-transparent border-0 border-t border-cyber-orange/30 mt-8' : 'p-4 pt-8 border border-cyber-orange/30 bg-cyber-orange/5 shadow-[0_0_15px_rgba(255,136,0,0.1)]'}`}>
+                            <div onClick={() => setIsAnomaliesCollapsed(!isAnomaliesCollapsed)} className="absolute -top-3 left-4 bg-cyber-card px-2 py-0.5 text-xs font-bold rounded uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all z-10 select-none shadow-[0_0_10px_rgba(0,0,0,0.5)] text-cyber-orange border border-cyber-orange hover:bg-cyber-orange hover:text-black"><AlertTriangle size={12}/> 异常反馈 ({selectedOrder.anomalies.length})<div className="ml-2 pl-2 border-l border-cyber-orange/30 flex items-center">{isAnomaliesCollapsed ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}</div></div>
                              {!isAnomaliesCollapsed && (
                                  <div className="space-y-2 animate-fade-in">
                                      {selectedOrder.anomalies.map((anomaly) => (
                                          <div key={anomaly.id} className="bg-cyber-bg border border-cyber-orange/30 p-3 rounded flex items-center justify-between text-xs hover:border-cyber-orange transition-colors">
-                                             <div className="flex items-center gap-3">
-                                                 <AlertTriangle size={16} className="text-cyber-orange" />
-                                                 <div>
-                                                     <div className="font-bold text-white">异常反馈: {anomaly.stepName}</div>
-                                                     <div className="text-cyber-muted">原因: {anomaly.reason} | 责任: {anomaly.department}</div>
-                                                 </div>
-                                             </div>
-                                             <div className="text-right">
-                                                 <div className="text-cyber-orange">{anomaly.durationDays} 天</div>
-                                                 <div className="text-cyber-muted opacity-60">{new Date(anomaly.startTime).toLocaleDateString()}</div>
-                                             </div>
+                                             <div className="flex items-center gap-3"><AlertTriangle size={16} className="text-cyber-orange" /><div><div className="font-bold text-white">异常反馈: {anomaly.stepName}</div><div className="text-cyber-muted">原因: {anomaly.reason} | 责任: {anomaly.department}</div></div></div>
+                                             <div className="text-right"><div className="text-cyber-orange">{anomaly.durationDays} 天</div><div className="text-cyber-muted opacity-60">{new Date(anomaly.startTime).toLocaleDateString()}</div></div>
                                          </div>
                                      ))}
                                  </div>
@@ -819,324 +474,186 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
 
                     {selectedOrder.status === MachineStatus.PLANNED ? (
                          <div className="text-center py-20 flex flex-col items-center justify-center h-full">
-                            <div className="w-24 h-24 bg-cyber-orange/10 rounded-full flex items-center justify-center mb-6 border border-cyber-orange/30 shadow-[0_0_30px_rgba(255,136,0,0.2)]">
-                                <AlertCircle className="w-12 h-12 text-cyber-orange animate-pulse" />
-                            </div>
-                            <h3 className="text-xl text-white font-bold mb-2">准备投产</h3>
-                            <button 
-                                onClick={() => handleStartOrder(selectedOrder.id)}
-                                className="mt-6 group bg-cyber-blue hover:bg-white text-black font-bold py-4 px-12 shadow-neon-blue transition-all flex items-center justify-center tracking-wider hover:scale-105"
-                            >
-                                <Play size={20} className="mr-3 group-hover:text-black" /> 启动生产流程
-                            </button>
+                            <div className="w-24 h-24 bg-cyber-orange/10 rounded-full flex items-center justify-center mb-6 border border-cyber-orange/30 shadow-[0_0_30px_rgba(255,136,0,0.2)]"><AlertCircle className="w-12 h-12 text-cyber-orange animate-pulse" /></div>
+                            <h3 className="text-xl text-white font-bold mb-2">{isReadOnly ? '尚未投产' : '准备投产'}</h3>
+                            {!isReadOnly ? (
+                                <button onClick={() => handleStartOrder(selectedOrder.id)} className="mt-6 group bg-cyber-blue hover:bg-white text-black font-bold py-4 px-12 shadow-neon-blue transition-all flex items-center justify-center tracking-wider hover:scale-105"><Play size={20} className="mr-3 group-hover:text-black" /> 启动生产流程</button>
+                            ) : (
+                                <p className="text-cyber-muted text-sm mt-4 font-mono uppercase tracking-widest border border-cyber-muted/30 px-6 py-2 rounded">Awaiting production start by manager</p>
+                            )}
                          </div>
                     ) : (
                         <div className="space-y-8 pb-10">
-                            {/* Render Parallel Modules */}
                             {Object.entries(groupedSteps).map(([parallelMod, steps]) => {
-                                // Count active/completed in this module
                                 const moduleCompleted = steps.filter(s => selectedOrder.stepStates?.[s.id]?.status === 'COMPLETED' || selectedOrder.stepStates?.[s.id]?.status === 'SKIPPED').length;
                                 const moduleActive = steps.filter(s => selectedOrder.stepStates?.[s.id]?.status === 'IN_PROGRESS').length;
-                                
-                                // LOGIC CHANGE: Use expandedModules to default to collapsed (false). Open only if true.
                                 const isExpanded = !!expandedModules[parallelMod]; 
-                                
                                 const isModuleFullyComplete = steps.length > 0 && moduleCompleted === steps.length;
                                 
-                                // --- UPDATED Schedule Expansion Logic ---
-                                const now = new Date();
-                                // EFFECTIVE NOW: If past 21:00, jump to tomorrow morning
-                                let effectiveNow = new Date(now);
-                                if (now.getHours() >= 21) {
-                                    effectiveNow.setDate(now.getDate() + 1);
-                                    effectiveNow.setHours(8, 30, 0, 0);
-                                } else if (now.getHours() < 8 || (now.getHours() === 8 && now.getMinutes() < 30)) {
-                                    effectiveNow.setHours(8, 30, 0, 0);
-                                }
-
-                                let pendingStepCursor = selectedOrder.startDate ? new Date(selectedOrder.startDate) : new Date();
-                                // Ensure start at 8:30 if it's earlier
-                                if (pendingStepCursor.getHours() < 8 || (pendingStepCursor.getHours() === 8 && pendingStepCursor.getMinutes() < 30)) {
-                                    pendingStepCursor.setHours(8, 30, 0, 0);
-                                }
-
                                 const rule = holidayRules[selectedOrder.holidayType] || DEFAULT_HOLIDAY_RULES['DOUBLE'];
+                                
+                                // Define dynamic item type for sorting
+                                type CalendarItem = 
+                                    | { type: 'ANOMALY'; data: AnomalyRecord; sortWeight: 0 }
+                                    | { type: 'STEP'; step: ProcessStep; status: StepStatusEnum; partLabel: string; sortWeight: number };
 
-                                const dailyAllocations: Array<{
-                                    date: Date,
-                                    step: ProcessStep,
-                                    status: StepStatusEnum,
-                                    partLabel: string
-                                }> = [];
+                                const dailyItems: Record<string, CalendarItem[]> = {};
+
+                                // 1. Allocate Steps
+                                let dayCursor = selectedOrder.startDate ? new Date(selectedOrder.startDate) : new Date();
+                                dayCursor.setHours(0,0,0,0);
 
                                 steps.forEach(step => {
                                     const stepState = selectedOrder.stepStates?.[step.id] || { status: 'PENDING' };
                                     
-                                    // Treat SKIPPED same as COMPLETED, ensure we have a date
                                     if (stepState.status === 'COMPLETED' || stepState.status === 'SKIPPED') {
-                                        // Use endTime if available, otherwise fall back to startTime or current time to prevent falling into PENDING
-                                        const dateStr = stepState.endTime || stepState.startTime || new Date().toISOString();
-                                        const endTime = new Date(dateStr);
+                                        const endTime = new Date(stepState.endTime || stepState.startTime || new Date().toISOString());
+                                        const dateKey = new Date(endTime); dateKey.setHours(0,0,0,0);
+                                        const key = dateKey.toISOString();
+                                        if (!dailyItems[key]) dailyItems[key] = [];
                                         
-                                        dailyAllocations.push({
-                                            date: new Date(endTime),
+                                        dailyItems[key].push({
+                                            type: 'STEP',
                                             step,
-                                            status: stepState.status, // Preserve actual status
-                                            partLabel: ''
+                                            status: stepState.status,
+                                            partLabel: '',
+                                            sortWeight: stepState.status === 'COMPLETED' ? 1 : 2
                                         });
                                         
-                                        if (endTime > pendingStepCursor) {
-                                            pendingStepCursor = new Date(endTime);
+                                        if (dateKey >= dayCursor) {
+                                            dayCursor = new Date(dateKey);
+                                            dayCursor.setDate(dayCursor.getDate() + 1);
                                         }
-                                        const endH = pendingStepCursor.getHours() + pendingStepCursor.getMinutes()/60;
-                                        if (endH >= 16.5) {
-                                            pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
-                                            pendingStepCursor.setHours(8, 30, 0, 0);
-                                        }
-
-                                    } else if (stepState.status === 'IN_PROGRESS' && stepState.startTime) {
-                                        let simulationCursor = new Date(stepState.startTime);
-                                        let hoursRemaining = step.estimatedHours;
-                                        const totalHours = step.estimatedHours;
-
-                                        // 1. Normalize Start Time (if starts before 8:30, treat as 8:30 for grid alignment)
-                                        if (simulationCursor.getHours() < 8 || (simulationCursor.getHours() === 8 && simulationCursor.getMinutes() < 30)) {
-                                            simulationCursor.setHours(8, 30, 0, 0);
-                                        }
-
-                                        // 2. Calculate initial used hours for the starting day
-                                        let cursorTimeVal = simulationCursor.getHours() + simulationCursor.getMinutes()/60;
-                                        let usedToday = Math.max(0, cursorTimeVal - 8.5); // 8.5 = 8:30 AM
-
-                                        // If started after 16:30 (8h work day end), roll to next day
-                                        if (usedToday >= 8 - 0.01) {
-                                             simulationCursor.setDate(simulationCursor.getDate() + 1);
-                                             simulationCursor.setHours(8, 30, 0, 0);
-                                             usedToday = 0;
-                                        }
-
-                                        while (hoursRemaining > 0) {
-                                             // Roll over if day is full (safety check inside loop)
-                                             if (usedToday >= 8 - 0.01) {
-                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
-                                                 simulationCursor.setHours(8, 30, 0, 0);
-                                                 usedToday = 0;
-                                             }
-
-                                             // Skip Holidays
-                                             let safety = 0;
-                                             while (safety < 60) {
-                                                 if (isWorkingDay(simulationCursor, rule)) {
-                                                     break;
-                                                 }
-                                                 simulationCursor.setDate(simulationCursor.getDate() + 1);
-                                                 simulationCursor.setHours(8, 30, 0, 0);
-                                                 usedToday = 0; 
-                                                 safety++;
-                                             }
-
-                                             // Calculate alloc
-                                             const capacity = 8 - usedToday;
-                                             const alloc = Math.min(hoursRemaining, capacity);
-
-                                             if (alloc > 0.01) {
-                                                 dailyAllocations.push({
-                                                     date: new Date(simulationCursor),
-                                                     step,
-                                                     status: 'IN_PROGRESS',
-                                                     partLabel: totalHours > 8 || hoursRemaining < totalHours ? `(${alloc.toFixed(1)}h)` : ''
-                                                 });
-                                             }
-
-                                             hoursRemaining -= alloc;
-                                             usedToday += alloc;
-                                             simulationCursor.setTime(simulationCursor.getTime() + alloc * 3600 * 1000);
-                                        }
-
-                                        // Update global pending cursor
-                                        if (simulationCursor > pendingStepCursor) {
-                                            pendingStepCursor = new Date(simulationCursor);
-                                        }
-
                                     } else {
-                                        // LOGIC ADJUSTMENT: PENDING items should not start in the past.
-                                        // If cursor is before effectiveNow, jump to effectiveNow.
-                                        if (pendingStepCursor < effectiveNow) {
-                                            pendingStepCursor = new Date(effectiveNow);
-                                        }
-
                                         let hoursRemaining = step.estimatedHours;
-                                        let totalHours = step.estimatedHours;
-                                        let cursorTimeVal = pendingStepCursor.getHours() + pendingStepCursor.getMinutes()/60;
-                                        let usedToday = Math.max(0, cursorTimeVal - 8.5); 
-                                        if (usedToday >= 8 - 0.01) {
-                                             pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
-                                             pendingStepCursor.setHours(8, 30, 0, 0);
-                                             usedToday = 0;
-                                        }
                                         while (hoursRemaining > 0) {
-                                            if (usedToday >= 8 - 0.01) {
-                                                 pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
-                                                 pendingStepCursor.setHours(8, 30, 0, 0);
-                                                 usedToday = 0;
-                                            }
                                             let safety = 0;
-                                            while (safety < 60) {
-                                                if (isWorkingDay(pendingStepCursor, rule)) {
-                                                    break;
-                                                }
-                                                pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
-                                                pendingStepCursor.setHours(8, 30, 0, 0);
-                                                usedToday = 0; 
+                                            while (!isWorkingDay(dayCursor, rule) && safety < 60) {
+                                                dayCursor.setDate(dayCursor.getDate() + 1);
                                                 safety++;
                                             }
-                                            const capacity = 8 - usedToday;
-                                            const alloc = Math.min(hoursRemaining, capacity);
-                                            if (alloc > 0.01) {
-                                                dailyAllocations.push({
-                                                    date: new Date(pendingStepCursor),
-                                                    step,
-                                                    status: 'PENDING',
-                                                    partLabel: totalHours > 8 || hoursRemaining < totalHours ? `(${alloc.toFixed(1)}h)` : ''
-                                                });
-                                            }
+                                            const alloc = Math.min(hoursRemaining, 8);
+                                            const key = dayCursor.toISOString();
+                                            if (!dailyItems[key]) dailyItems[key] = [];
+                                            
+                                            dailyItems[key].push({
+                                                type: 'STEP',
+                                                step,
+                                                status: stepState.status,
+                                                partLabel: step.estimatedHours > 8 ? `(${alloc}H)` : '',
+                                                sortWeight: stepState.status === 'IN_PROGRESS' ? 3 : 4
+                                            });
+
                                             hoursRemaining -= alloc;
-                                            usedToday += alloc;
-                                            pendingStepCursor.setTime(pendingStepCursor.getTime() + alloc * 3600 * 1000);
+                                            dayCursor.setDate(dayCursor.getDate() + 1);
                                         }
-                                        pendingStepCursor.setDate(pendingStepCursor.getDate() + 1);
-                                        pendingStepCursor.setHours(8, 30, 0, 0);
                                     }
                                 });
 
-                                const weeks: Record<string, typeof dailyAllocations> = {};
-                                dailyAllocations.forEach(alloc => {
-                                    const d = new Date(alloc.date);
-                                    const day = d.getDay();
-                                    const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
-                                    const monday = new Date(d.setDate(diff));
+                                // 2. Allocate Anomalies (INTEGRATED FOR RANGE OF DAYS)
+                                if (selectedOrder.anomalies) {
+                                    selectedOrder.anomalies.forEach(anomaly => {
+                                        // Only show anomalies associated with this module's steps OR general ones in the first module
+                                        const isLinkedToThisModule = steps.some(s => s.name === anomaly.stepName);
+                                        const isFirstModule = Object.keys(groupedSteps)[0] === parallelMod;
+                                        const isGeneral = anomaly.stepName === 'OTHER' || !selectedModel?.steps.some(s => s.name === anomaly.stepName);
+
+                                        if (isLinkedToThisModule || (isFirstModule && isGeneral)) {
+                                            const startDate = new Date(anomaly.startTime);
+                                            startDate.setHours(0,0,0,0);
+                                            
+                                            // Determine end range (if end date exists, use it; otherwise use TODAY)
+                                            const endDate = anomaly.endTime ? new Date(anomaly.endTime) : new Date();
+                                            endDate.setHours(23,59,59,999);
+                                            
+                                            // Loop through every day in the range
+                                            const iterDate = new Date(startDate);
+                                            // Max loop safety (90 days)
+                                            let safety = 0;
+                                            while (iterDate <= endDate && safety < 90) {
+                                                const key = iterDate.toISOString();
+                                                if (!dailyItems[key]) dailyItems[key] = [];
+                                                
+                                                // Prevent duplicate markers for same anomaly on same day
+                                                if (!dailyItems[key].find(item => item.type === 'ANOMALY' && item.data.id === anomaly.id)) {
+                                                    dailyItems[key].push({
+                                                        type: 'ANOMALY',
+                                                        data: anomaly,
+                                                        sortWeight: 0 // HIGHEST PRIORITY
+                                                    });
+                                                }
+                                                
+                                                iterDate.setDate(iterDate.getDate() + 1);
+                                                safety++;
+                                            }
+                                        }
+                                    });
+                                }
+
+                                // 3. Build Weeks for rendering
+                                const weeks: Record<string, { date: Date, items: CalendarItem[] }[]> = {};
+                                Object.entries(dailyItems).forEach(([key, items]) => {
+                                    const date = new Date(key);
+                                    items.sort((a, b) => a.sortWeight - b.sortWeight);
+
+                                    const day = date.getDay();
+                                    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+                                    const monday = new Date(date.getTime());
+                                    monday.setDate(diff);
                                     monday.setHours(0,0,0,0);
-                                    
-                                    const key = monday.toISOString();
-                                    if (!weeks[key]) weeks[key] = [];
-                                    weeks[key].push(alloc);
+                                    const weekKey = monday.toISOString();
+
+                                    if (!weeks[weekKey]) weeks[weekKey] = [];
+                                    weeks[weekKey].push({ date, items });
                                 });
 
                                 const sortedWeekKeys = Object.keys(weeks).sort((a,b) => new Date(a).getTime() - new Date(b).getTime());
 
-                                // Render Module Container
                                 return (
                                     <div key={parallelMod} className={`relative rounded-lg transition-all duration-300 mb-6 ${!isExpanded ? 'h-px bg-transparent border-0 border-t border-cyber-muted/20 mt-8' : `p-0 pt-8 border ${isModuleFullyComplete ? 'border-green-500/50 bg-green-500/5 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'border-cyber-muted/20 bg-cyber-card/30 hover:border-cyber-blue/30'}`}`}>
-                                        
-                                        {/* Header Badge - Clickable to toggle */}
-                                        <div 
-                                            onClick={() => toggleModule(parallelMod)}
-                                            className={`absolute -top-3 left-4 bg-cyber-card px-2 py-0.5 text-xs font-bold rounded uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all z-10 select-none shadow-[0_0_10px_rgba(0,0,0,0.5)] ${isModuleFullyComplete ? 'text-green-500 border border-green-500 hover:bg-green-500/10' : 'text-cyber-blue border border-cyber-blue/30 hover:bg-cyber-blue/10 hover:border-cyber-blue'}`}
-                                        >
-                                            <Layers size={12}/> 
-                                            {parallelMod}
-                                            {isModuleFullyComplete ? (
-                                                <CheckCircle size={12} className="ml-1" strokeWidth={3} />
-                                            ) : (
-                                                moduleActive > 0 && <span className="w-2 h-2 rounded-full bg-cyber-blue animate-pulse shadow-neon-blue"></span>
-                                            )}
-                                            <div className={`ml-2 pl-2 border-l flex items-center ${isModuleFullyComplete ? 'border-green-500/30' : 'border-cyber-blue/20 opacity-70 group-hover:opacity-100'}`}>
-                                                {/* If expanded, show UP (collapse), else show DOWN (expand) */}
-                                                {isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-                                            </div>
-                                        </div>
-
-                                        <div className={`absolute -top-3 right-4 text-[10px] bg-cyber-card px-2 py-0.5 border rounded select-none z-10 ${isModuleFullyComplete ? 'text-green-500 border-green-500/50' : 'text-cyber-muted border-cyber-muted/20'}`}>
-                                            进度: {moduleCompleted}/{steps.length}
-                                        </div>
-
-                                        {/* Body Content - Only if Expanded */}
+                                        <div onClick={() => toggleModule(parallelMod)} className={`absolute -top-3 left-4 bg-cyber-card px-2 py-0.5 text-xs font-bold rounded uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all z-10 select-none shadow-[0_0_10px_rgba(0,0,0,0.5)] ${isModuleFullyComplete ? 'text-green-500 border border-green-500 hover:bg-green-500/10' : 'text-cyber-blue border border-cyber-blue/30 hover:bg-cyber-blue/10 hover:border-cyber-blue'}`}><Layers size={12}/> {parallelMod}{isModuleFullyComplete ? <CheckCircle size={12} className="ml-1" strokeWidth={3} /> : moduleActive > 0 && <span className="w-2 h-2 rounded-full bg-cyber-blue animate-pulse shadow-neon-blue"></span>}<div className={`ml-2 pl-2 border-l flex items-center ${isModuleFullyComplete ? 'border-green-500/30' : 'border-cyber-blue/20 opacity-70 group-hover:opacity-100'}`}>{isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}</div></div>
+                                        <div className={`absolute -top-3 right-4 text-[10px] bg-cyber-card px-2 py-0.5 border rounded select-none z-10 ${isModuleFullyComplete ? 'text-green-500 border-green-500/50' : 'text-cyber-muted border-cyber-muted/20'}`}>进度: {moduleCompleted}/{steps.length}</div>
                                         {isExpanded && (
                                             <div className="p-4 animate-fade-in">
-                                                {/* Week Header */}
-                                                <div className="grid grid-cols-7 gap-1 mb-2 text-center">
-                                                    {['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map(day => (
-                                                        <div key={day} className="text-[10px] text-cyber-muted uppercase tracking-wider font-bold py-1 bg-cyber-bg/50 border border-cyber-muted/10">
-                                                            {day}
-                                                        </div>
-                                                    ))}
-                                                </div>
-
-                                                {/* Weekly Rows */}
+                                                <div className="grid grid-cols-7 gap-1 mb-2 text-center">{['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map(day => (<div key={day} className="text-[10px] text-cyber-muted uppercase tracking-wider font-bold py-1 bg-cyber-bg/50 border border-cyber-muted/10">{day}</div>))}</div>
                                                 <div className="space-y-1">
                                                     {sortedWeekKeys.map(weekKey => {
-                                                        const weekSteps = weeks[weekKey];
+                                                        const weekData = weeks[weekKey];
                                                         const weekDate = new Date(weekKey);
-                                                        
                                                         return (
                                                             <div key={weekKey} className="relative group/week">
                                                                 <div className="grid grid-cols-7 gap-1 min-h-[60px] border-b border-cyber-muted/5 pb-1">
                                                                     {[0, 1, 2, 3, 4, 5, 6].map(dayIndex => {
                                                                         const targetJsDay = (dayIndex + 1) % 7;
-                                                                        const dayAllocations = weekSteps.filter(s => s.date.getDay() === targetJsDay);
-
+                                                                        const dayInfo = weekData.find(d => d.date.getDay() === targetJsDay);
                                                                         return (
                                                                             <div key={dayIndex} className="bg-cyber-bg/20 border border-cyber-muted/5 p-1 relative min-h-[60px]">
-                                                                                {/* Date Label */}
-                                                                                {dayIndex === 0 && (
-                                                                                    <div className="absolute top-1 right-1 text-[9px] text-white/70 font-mono leading-none pointer-events-none">
-                                                                                        {weekDate.getMonth()+1}/{weekDate.getDate()}
-                                                                                    </div>
-                                                                                )}
-
+                                                                                {dayIndex === 0 && <div className="absolute top-1 right-1 text-[9px] text-white/70 font-mono leading-none pointer-events-none">{weekDate.getMonth()+1}/{weekDate.getDate()}</div>}
                                                                                 <div className="flex flex-col gap-1">
-                                                                                    {dayAllocations.map((alloc, i) => {
-                                                                                        const step = alloc.step;
-                                                                                        let cardStyle = 'bg-cyber-bg/80 border-cyber-muted/20 text-cyber-muted hover:border-cyber-blue/50 hover:text-white';
-                                                                                        if (alloc.status === 'IN_PROGRESS') {
-                                                                                            cardStyle = 'bg-cyber-blue/20 border-cyber-blue text-white shadow-neon-blue';
-                                                                                        } else if (alloc.status === 'COMPLETED') {
-                                                                                            cardStyle = 'bg-green-500/10 border-green-500/30 text-green-400 opacity-80';
-                                                                                        } else if (alloc.status === 'SKIPPED') {
-                                                                                            cardStyle = 'bg-cyber-orange/10 border-cyber-orange/30 text-cyber-orange opacity-80';
+                                                                                    {dayInfo?.items.map((item, i) => {
+                                                                                        if (item.type === 'ANOMALY') {
+                                                                                            return (
+                                                                                                <div key={`anomaly-${item.data.id}-${i}`} className="bg-red-500/10 border border-red-500/30 text-red-400 p-1 rounded text-[10px] flex items-center gap-1 truncate font-bold animate-pulse" title={`异常: ${item.data.reason} (${item.data.department})`}>
+                                                                                                    <AlertTriangle size={10} className="flex-shrink-0" />
+                                                                                                    <span className="truncate">{item.data.reason}</span>
+                                                                                                </div>
+                                                                                            );
                                                                                         }
-
+                                                                                        
+                                                                                        const step = item.step;
+                                                                                        let cardStyle = 'bg-cyber-bg/80 border-cyber-muted/20 text-cyber-muted hover:border-cyber-blue/50 hover:text-white';
+                                                                                        if (item.status === 'IN_PROGRESS') cardStyle = 'bg-cyber-blue/20 border-cyber-blue text-white shadow-neon-blue';
+                                                                                        else if (item.status === 'COMPLETED') cardStyle = 'bg-green-500/10 border-green-500/30 text-green-400 opacity-80';
+                                                                                        else if (item.status === 'SKIPPED') cardStyle = 'bg-cyber-orange/10 border-cyber-orange/30 text-cyber-orange opacity-80';
+                                                                                        
                                                                                         return (
-                                                                                            <button
-                                                                                                key={`${step.id}-${i}`}
-                                                                                                onClick={() => handleStepClick(step)}
-                                                                                                className={`text-left p-1.5 rounded border text-[10px] w-full transition-all flex flex-col gap-1 mb-1 ${cardStyle}`}
-                                                                                                title={`${step.name} (${step.estimatedHours}H)`}
-                                                                                            >
-                                                                                                {alloc.status === 'COMPLETED' ? (
-                                                                                                    <div className="flex items-center gap-1 w-full">
-                                                                                                        <CheckCircle size={12} className="flex-shrink-0" />
-                                                                                                        <span className="truncate">{step.name} {alloc.partLabel}</span>
-                                                                                                    </div>
-                                                                                                ) : alloc.status === 'SKIPPED' ? (
-                                                                                                    <>
-                                                                                                        <div className="flex items-center gap-2 w-full opacity-80 mb-0.5">
-                                                                                                            <Ban size={10} className="text-cyber-orange" />
-                                                                                                            <div className="text-[9px] border border-current px-1 rounded leading-none whitespace-nowrap">
-                                                                                                                {step.module}
-                                                                                                            </div>
-                                                                                                            <div className="text-[10px] font-mono leading-none decoration-slice">
-                                                                                                                 0H (忽略)
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                        <div className="leading-snug font-bold break-words text-sm text-left line-through decoration-cyber-orange/50">
-                                                                                                            {step.name}
-                                                                                                        </div>
-                                                                                                    </>
+                                                                                            <button key={`${step.id}-${i}`} onClick={() => handleStepClick(step)} className={`text-left p-1.5 rounded border text-[10px] w-full transition-all flex flex-col gap-1 mb-0.5 ${cardStyle}`} title={`${step.name} (${step.estimatedHours}H)`}>
+                                                                                                {item.status === 'COMPLETED' ? (
+                                                                                                    <div className="flex items-center gap-1 w-full"><CheckCircle size={12} className="flex-shrink-0" /><span className="truncate">{step.name} {item.partLabel}</span></div>
+                                                                                                ) : item.status === 'SKIPPED' ? (
+                                                                                                    <><div className="flex items-center gap-2 w-full opacity-80 mb-0.5"><Ban size={10} className="text-cyber-orange" /><div className="text-[9px] border border-current px-1 rounded leading-none whitespace-nowrap">{step.module}</div><div className="text-[10px] font-mono middle leading-none decoration-slice">0H (忽略)</div></div><div className="leading-snug font-bold break-words text-sm text-left line-through decoration-cyber-orange/50">{step.name}</div></>
                                                                                                 ) : (
-                                                                                                    <>
-                                                                                                        <div className="flex items-center gap-2 w-full opacity-80 mb-0.5">
-                                                                                                             <div className="text-[9px] border border-current px-1 rounded leading-none whitespace-nowrap text-cyber-muted">
-                                                                                                                {step.module}
-                                                                                                            </div>
-                                                                                                            <div className="text-[10px] font-mono leading-none text-cyber-muted">
-                                                                                                                {step.estimatedHours}H {alloc.partLabel}
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                        <div className="leading-snug font-bold break-words text-sm text-left">
-                                                                                                            {step.name}
-                                                                                                        </div>
-                                                                                                    </>
+                                                                                                    <><div className="flex items-center gap-2 w-full opacity-80 mb-0.5"><div className="text-[9px] border border-current px-1 rounded leading-none whitespace-nowrap text-cyber-muted">{step.module}</div><div className="text-[10px] font-mono leading-none text-cyber-muted">{step.estimatedHours}H {item.partLabel}</div></div><div className="leading-snug font-bold break-words text-sm text-left">{step.name}</div></>
                                                                                                 )}
                                                                                             </button>
                                                                                         )
@@ -1162,10 +679,10 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
         ) : (
             <div className="h-full flex flex-col items-center justify-center text-cyber-muted bg-cyber-card/30 rounded-none border border-dashed border-cyber-muted/30 p-8">
                 <div className="w-20 h-20 bg-cyber-muted/5 rounded-full flex items-center justify-center mb-6 animate-pulse">
-                    <Settings className="text-cyber-muted" size={40} />
+                    {isReadOnly ? <Eye className="text-cyber-blue" size={40} /> : <Settings className="text-cyber-muted" size={40} />}
                 </div>
-                <p className="text-xl font-bold tracking-widest text-white mb-2">等待指令</p>
-                <p className="text-sm text-cyber-blue">请从左侧列表选择机台以开始操作...</p>
+                <p className="text-xl font-bold tracking-widest text-white mb-2">{isReadOnly ? '生產監控中' : '等待指令'}</p>
+                <p className="text-sm text-cyber-blue">{isReadOnly ? '請從左側清單選擇機台以查看實時生產進度' : '请从左侧列表选择机台以开始操作...'}</p>
             </div>
         )}
       </div>

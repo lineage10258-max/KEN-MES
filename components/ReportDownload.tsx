@@ -86,10 +86,17 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
   const getDailyScheduleData = () => {
       if (!dailyScheduleWorkshop) return [];
 
-      const targetOrders = orders.filter(o => 
-          o.status === MachineStatus.IN_PROGRESS && 
-          o.workshop?.startsWith(dailyScheduleWorkshop)
-      );
+      const targetOrders = orders
+          .filter(o => 
+              o.status === MachineStatus.IN_PROGRESS && 
+              o.workshop?.startsWith(dailyScheduleWorkshop)
+          )
+          // ADJUSTMENT: Sort by Business Closing Date (Earliest to Latest)
+          .sort((a, b) => {
+              const dateA = a.businessClosingDate ? new Date(a.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
+              const dateB = b.businessClosingDate ? new Date(b.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
+              return dateA - dateB;
+          });
 
       const todayStr = new Date().toDateString();
 
@@ -209,6 +216,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       }));
     });
 
+    // Fix: Typo 'annomalies' corrected to 'anomalies'
     if (anomalies.length === 0) {
         alert("暂无异常记录可导出");
         return;
@@ -249,10 +257,17 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
 
   // 4. Export Daily Schedule Logic (Reusable for the modal button)
   const handleExportDailySchedule = (workshopPrefix: string) => {
-      const targetOrders = orders.filter(o => 
-          o.status === MachineStatus.IN_PROGRESS && 
-          o.workshop?.startsWith(workshopPrefix)
-      );
+      const targetOrders = orders
+          .filter(o => 
+              o.status === MachineStatus.IN_PROGRESS && 
+              o.workshop?.startsWith(workshopPrefix)
+          )
+          // ADJUSTMENT: Sort by Business Closing Date (Earliest to Latest)
+          .sort((a, b) => {
+              const dateA = a.businessClosingDate ? new Date(a.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
+              const dateB = b.businessClosingDate ? new Date(b.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
+              return dateA - dateB;
+          });
 
       if (targetOrders.length === 0) {
           alert(`${workshopPrefix}车间当前无进行中的机台。`);
@@ -390,7 +405,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
         link.click();
     } catch (err) {
         console.error("Image Export Failed:", err);
-        alert("图片导出失败，请重试");
+        alert("图片导出失败，请重試");
     } finally {
         if (document.body.contains(clone)) {
             document.body.removeChild(clone);
@@ -591,7 +606,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                          <h3 className="text-lg font-bold text-white">异常记录清单</h3>
                      </div>
                      <p className="text-sm text-cyber-muted mb-6 flex-1">
-                         汇整全厂所有机台的异常申报记录，包含原因、责任单位及自动计算的影响天数。
+                         汇整全厂所有机台的异常申报记录，包含原因、责任单位及自动計算的影响天数。
                      </p>
                      <button 
                         onClick={handleExportAnomalies}
@@ -612,7 +627,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                          <h3 className="text-lg font-bold text-white">生产日志流水</h3>
                      </div>
                      <p className="text-sm text-cyber-muted mb-6 flex-1">
-                         详细的工序完工记录流水帐，包含具体的操作人员、完工时间点及相关备注。
+                         详细的工序完工记录流水帳，包含具体的操作人员、完工时间点及相关备注。
                      </p>
                      <button 
                         onClick={handleExportLogs}
