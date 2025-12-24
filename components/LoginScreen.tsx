@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { userService } from '../services/userService';
 import { AppUser } from '../types';
@@ -15,6 +16,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!username || !password) {
+            setError('请输入用户名和密码');
+            return;
+        }
+
         setLoading(true);
         setError('');
         
@@ -27,9 +33,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             }
         } catch (err: any) {
             console.error("Login screen caught error:", err);
-            // Handle different error shapes safely
-            const msg = err.message || (typeof err === 'string' ? err : '系统错误，请重试');
-            setError(`登录失败: ${msg}`);
+            // If it's a specific network error, show a more prominent warning
+            const msg = err.message || '系统连接错误';
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -45,10 +51,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyber-blue/10 rounded-full blur-[100px] animate-pulse"></div>
             <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyber-orange/10 rounded-full blur-[100px] animate-pulse delay-1000"></div>
 
-            {/* Login Card - Inverted Trapezoid Shape Hint */}
+            {/* Login Card */}
             <div className="relative z-10 w-full max-w-md p-1">
                 <div className="bg-cyber-card border border-cyber-blue/30 shadow-neon-blue backdrop-blur-md relative overflow-hidden">
-                    {/* Decorative Lines */}
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyber-blue to-transparent"></div>
                     <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyber-orange to-transparent"></div>
                     
@@ -92,8 +97,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                             </div>
 
                             {error && (
-                                <div className="flex items-center gap-2 text-red-500 text-xs font-mono bg-red-500/10 p-2 border border-red-500/20 break-all">
-                                    <AlertTriangle size={14} className="flex-shrink-0" /> 
+                                <div className="flex items-start gap-2 text-red-500 text-xs font-mono bg-red-500/10 p-3 border border-red-500/20 break-words">
+                                    <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" /> 
                                     <span>{error}</span>
                                 </div>
                             )}
@@ -101,23 +106,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                             <button 
                                 type="submit" 
                                 disabled={loading}
-                                className="w-full bg-cyber-blue hover:bg-white text-black font-display font-bold py-4 shadow-neon-blue transition-all uppercase tracking-widest flex items-center justify-center gap-2 group mt-4 hover:scale-[1.02]"
+                                className="w-full bg-cyber-blue hover:bg-white text-black font-display font-bold py-4 shadow-neon-blue transition-all uppercase tracking-widest flex items-center justify-center gap-2 group mt-4 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? '验证中...' : '登录系统'}
                                 {!loading && <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform"/>}
                             </button>
                         </form>
                         
-                        <div className="mt-8 text-center">
-                             <p className="text-[10px] text-cyber-muted font-mono">
-                                 安全连接至内部生产数据库 <br/> ID: {new Date().getTime().toString(36).toUpperCase()}
+                        <div className="mt-8 text-center border-t border-cyber-muted/10 pt-6">
+                             <p className="text-[10px] text-cyber-muted font-mono leading-relaxed">
+                                 安全连接至内部生产数据库 <br/> 
+                                 SESSION ID: {new Date().getTime().toString(36).toUpperCase()}
                              </p>
                         </div>
                     </div>
                 </div>
             </div>
             
-            {/* Corner Text */}
             <div className="absolute bottom-4 left-4 text-cyber-muted/30 font-mono text-xs">
                 SYSTEM STATUS: ONLINE
             </div>

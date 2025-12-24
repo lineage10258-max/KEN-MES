@@ -1,8 +1,7 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepStatusEnum, StepState, AnomalyRecord, HolidayRule, HolidayType } from '../types';
 import { calculateProjectedDate, isWorkingDay, DEFAULT_HOLIDAY_RULES } from '../services/holidayService';
-import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table, Ban, Eye, Lock } from 'lucide-react';
+import { CheckCircle, Play, AlertCircle, Clock, Filter, Layers, Settings, X, Activity, User, Plus, ChevronDown, ChevronUp, AlertTriangle, Save, RotateCcw, Search, Table, Ban, Eye, Lock, Zap, PauseOctagon } from 'lucide-react';
 
 interface WorkstationProps {
   orders: WorkOrder[];
@@ -27,6 +26,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       stepName: string;
       reason: string;
       department: string;
+      anomalyStatus: 'CONTINUOUS' | 'HALTED';
       startTime: string;
       endTime: string;
       durationDays: string;
@@ -34,6 +34,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
       stepName: '',
       reason: '',
       department: '',
+      anomalyStatus: 'CONTINUOUS',
       startTime: '',
       endTime: '',
       durationDays: '0'
@@ -45,6 +46,15 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
   // Filter States
   const [workshopTab, setWorkshopTab] = useState<'ALL' | 'K1' | 'K2' | 'K3'>('ALL');
   const [statusTab, setStatusTab] = useState<'ALL' | MachineStatus>(MachineStatus.IN_PROGRESS);
+
+  const formatMMDD = (date: Date | string | undefined) => {
+    if (!date) return '-';
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '-';
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    return `${m}/${day < 10 ? '0' + day : day}`;
+  };
 
   const filteredOrders = orders.filter(o => {
       const matchWorkshop = workshopTab === 'ALL' || (o.workshop?.startsWith(workshopTab) ?? false);
@@ -210,6 +220,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
     if (isReadOnly) return;
     setNewAnomaly({
         stepName: '', reason: '', department: '',
+        anomalyStatus: 'CONTINUOUS',
         startTime: getDefaultTimeStr(8, 30),
         endTime: getDefaultTimeStr(17, 30),
         durationDays: '0'
@@ -229,6 +240,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
           stepName: newAnomaly.stepName,
           reason: newAnomaly.reason,
           department: newAnomaly.department,
+          anomalyStatus: newAnomaly.anomalyStatus,
           startTime: new Date(newAnomaly.startTime).toISOString(),
           endTime: newAnomaly.endTime ? new Date(newAnomaly.endTime).toISOString() : '',
           durationDays: newAnomaly.durationDays,
@@ -296,7 +308,7 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                             {(!selectedOrder.stepStates?.[selectedStep.id] || selectedOrder.stepStates?.[selectedStep.id]?.status === 'PENDING') && (
                                 <>
                                     <button onClick={() => handleUpdateCurrentStepStatus('IN_PROGRESS')} className="flex-1 bg-cyber-blue hover:bg-white text-black font-bold py-3 px-4 shadow-neon-blue transition-all flex items-center justify-center gap-2"><Play size={18} fill="currentColor" /> 开始作业</button>
-                                    <button onClick={() => handleUpdateCurrentStepStatus('SKIPPED')} className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:bg-cyber-muted hover:text-white font-bold py-3 px-4 transition-all flex items-center justify-center gap-2" title="忽略此作业，將剩餘工時設為0以滿足出貨需求"><Ban size={18} /> 忽略作业</button>
+                                    <button onClick={() => handleUpdateCurrentStepStatus('SKIPPED')} className="flex-1 bg-transparent border border-cyber-muted text-cyber-muted hover:text-cyber-muted hover:text-white font-bold py-3 px-4 transition-all flex items-center justify-center gap-2" title="忽略此作业，將剩餘工時設為0以滿足出貨需求"><Ban size={18} /> 忽略作业</button>
                                 </>
                             )}
                             {selectedOrder.stepStates?.[selectedStep.id]?.status === 'IN_PROGRESS' && (
@@ -345,13 +357,34 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                           <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">异常原因描述</label>
                           <textarea value={newAnomaly.reason} onChange={(e) => setNewAnomaly({...newAnomaly, reason: e.target.value})} rows={3} placeholder="请详细描述异常情况..." className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"/>
                       </div>
-                      <div>
-                          <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">责任单位</label>
-                          <select value={newAnomaly.department} onChange={(e) => setNewAnomaly({...newAnomaly, department: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm">
-                                <option value="">-- 请选择部门 --</option>
-                                <option value="生产">生产</option><option value="品管">品管</option><option value="电控">电控</option><option value="KA">KA</option><option value="应用">应用</option><option value="采购">采购</option><option value="生管">生管</option><option value="仓库">仓库</option><option value="设计">设计</option><option value="业务">业务</option><option value="其他">其他</option>
-                            </select>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">责任单位</label>
+                            <select value={newAnomaly.department} onChange={(e) => setNewAnomaly({...newAnomaly, department: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm">
+                                    <option value="">-- 请选择部门 --</option>
+                                    <option value="生产">生产</option><option value="品管">品管</option><option value="电控">电控</option><option value="KA">KA</option><option value="应用">应用</option><option value="采购">采购</option><option value="生管">生管</option><option value="仓库">仓库</option><option value="设计">设计</option><option value="业务">业务</option><option value="其他">其他</option>
+                                </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">異常狀態</label>
+                            <div className="flex bg-cyber-bg border border-cyber-muted/30 rounded p-1 gap-1">
+                                <button 
+                                    onClick={() => setNewAnomaly({...newAnomaly, anomalyStatus: 'CONTINUOUS'})}
+                                    className={`flex-1 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all ${newAnomaly.anomalyStatus === 'CONTINUOUS' ? 'bg-cyber-blue text-black shadow-neon-blue' : 'text-cyber-muted hover:text-white'}`}
+                                >
+                                    <Zap size={10} /> 持續生產
+                                </button>
+                                <button 
+                                    onClick={() => setNewAnomaly({...newAnomaly, anomalyStatus: 'HALTED'})}
+                                    className={`flex-1 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all ${newAnomaly.anomalyStatus === 'HALTED' ? 'bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'text-cyber-muted hover:text-white'}`}
+                                >
+                                    <PauseOctagon size={10} /> 停工
+                                </button>
+                            </div>
+                        </div>
                       </div>
+
                       <div className="grid grid-cols-2 gap-4">
                           <div><label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">发生时间</label><input type="datetime-local" value={newAnomaly.startTime} onChange={(e) => setNewAnomaly({...newAnomaly, startTime: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"/></div>
                           <div><label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">结束时间</label><input type="datetime-local" value={newAnomaly.endTime} onChange={(e) => setNewAnomaly({...newAnomaly, endTime: e.target.value})} className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"/></div>
@@ -411,8 +444,8 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                         <div className="flex items-center gap-2 justify-end">
                                             <div className="flex gap-1 justify-end">
                                                 <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-sm ${variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'}`}><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">差异</span><div className={`flex items-center gap-0.5 text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>{variance > 0 && <AlertTriangle size={8}/>}{variance > 0 ? `+${variance}` : variance}</div></div>
-                                                <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]"><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">完工</span><span className="text-xs font-bold text-cyber-blue leading-none">{projectedDate.getMonth() + 1}/{projectedDate.getDate()}</span></div>
-                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'}`}><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">结关</span><span className={`text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-cyber-muted'}`}>{closingDate ? `${closingDate.getMonth() + 1}/${closingDate.getDate()}` : '-'}</span></div>
+                                                <div className="flex flex-col items-center justify-center w-14 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]"><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">完工</span><span className="text-xs font-bold text-cyber-blue leading-none">{formatMMDD(projectedDate)}</span></div>
+                                                <div className={`flex flex-col items-center justify-center w-14 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'}`}><span className="text-[10px] text-white font-bold mb-0.5 block drop-shadow-md">结关</span><span className={`text-xs font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-cyber-muted'}`}>{closingDate ? formatMMDD(closingDate) : '-'}</span></div>
                                             </div>
                                             <span className={`h-10 flex items-center justify-center px-2 text-[10px] rounded uppercase border flex-shrink-0 ${order.status === MachineStatus.IN_PROGRESS ? 'border-cyber-blue/40 text-cyber-blue' : order.status === MachineStatus.PLANNED ? 'border-cyber-orange/40 text-cyber-orange' : 'border-green-500/40 text-green-500'}`}>{order.status === MachineStatus.IN_PROGRESS ? '进行中' : order.status === MachineStatus.PLANNED ? '排隊中' : '完成'}</span>
                                         </div>
@@ -444,10 +477,10 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                         </div>
                         {dateMetrics && (
                             <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 w-full xl:w-auto">
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">上线日</span><span className="text-sm font-bold text-white drop-shadow-md">{dateMetrics.startDate ? `${dateMetrics.startDate.getMonth()+1}/${dateMetrics.startDate.getDate()}` : '--'}</span></div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">上线日</span><span className="text-sm font-bold text-white drop-shadow-md">{formatMMDD(dateMetrics.startDate)}</span></div>
                                 <div className={`bg-cyber-card/80 border p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-sm ${dateMetrics.varianceDays > 0 ? 'border-cyber-orange/40 bg-cyber-orange/5' : 'border-green-500/40 bg-green-500/10'}`}><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">差异天数</span><div className={`flex items-center gap-1 text-sm font-bold drop-shadow-md ${dateMetrics.varianceDays > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>{dateMetrics.varianceDays > 0 && <AlertTriangle size={12}/>}{dateMetrics.varianceDays > 0 ? `+${dateMetrics.varianceDays}` : dateMetrics.varianceDays}</div></div>
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产完工</span><span className="text-sm font-bold text-cyber-blue drop-shadow-md">{dateMetrics.projectedDate.getMonth()+1}/${dateMetrics.projectedDate.getDate()}</span></div>
-                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">业务结关</span><span className="text-sm font-bold text-white drop-shadow-md">{dateMetrics.closingDate ? `${dateMetrics.closingDate.getMonth()+1}/${dateMetrics.closingDate.getDate()}` : '--'}</span></div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产完工</span><span className="text-sm font-bold text-cyber-blue drop-shadow-md">{formatMMDD(dateMetrics.projectedDate)}</span></div>
+                                <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">业务结关</span><span className="text-sm font-bold text-white drop-shadow-md">{formatMMDD(dateMetrics.closingDate)}</span></div>
                                 <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">发料率</span><span className="text-sm font-bold text-white drop-shadow-md">{dateMetrics.materialRate}</span></div>
                                 <div className="bg-cyber-card/80 border border-cyber-blue/30 p-2 rounded flex flex-col items-center justify-center min-w-[90px] shadow-[0_0_10px_rgba(0,240,255,0.1)]"><span className="text-[11px] text-cyan-200/70 uppercase tracking-wider mb-1 font-bold">生产进度</span><span className={`text-sm font-bold drop-shadow-md ${progressPercentage === 100 ? 'text-green-400' : 'text-cyber-blue'}`}>{progressPercentage}%</span></div>
                             </div>
@@ -462,9 +495,25 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                              {!isAnomaliesCollapsed && (
                                  <div className="space-y-2 animate-fade-in">
                                      {selectedOrder.anomalies.map((anomaly) => (
-                                         <div key={anomaly.id} className="bg-cyber-bg border border-cyber-orange/30 p-3 rounded flex items-center justify-between text-xs hover:border-cyber-orange transition-colors">
-                                             <div className="flex items-center gap-3"><AlertTriangle size={16} className="text-cyber-orange" /><div><div className="font-bold text-white">异常反馈: {anomaly.stepName}</div><div className="text-cyber-muted">原因: {anomaly.reason} | 责任: {anomaly.department}</div></div></div>
-                                             <div className="text-right"><div className="text-cyber-orange">{anomaly.durationDays} 天</div><div className="text-cyber-muted opacity-60">{new Date(anomaly.startTime).toLocaleDateString()}</div></div>
+                                         <div key={anomaly.id} className={`bg-cyber-bg border p-3 rounded flex items-center justify-between text-xs hover:border-cyber-orange transition-colors ${anomaly.anomalyStatus === 'HALTED' ? 'border-red-500/50' : 'border-cyber-orange/30'}`}>
+                                             <div className="flex items-center gap-3">
+                                                 <div className={`p-1.5 rounded-full ${anomaly.anomalyStatus === 'HALTED' ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-cyber-blue/20 text-cyber-blue'}`}>
+                                                    {anomaly.anomalyStatus === 'HALTED' ? <PauseOctagon size={16} /> : <Zap size={16} />}
+                                                 </div>
+                                                 <div>
+                                                     <div className="font-bold text-white flex items-center gap-2">
+                                                         异常反馈: {anomaly.stepName}
+                                                         <span className={`text-[9px] px-1 rounded font-mono ${anomaly.anomalyStatus === 'HALTED' ? 'bg-red-500 text-white' : 'bg-cyber-blue/10 text-cyber-blue'}`}>
+                                                             {anomaly.anomalyStatus === 'HALTED' ? '停工' : '持續生產'}
+                                                         </span>
+                                                     </div>
+                                                     <div className="text-cyber-muted">原因: {anomaly.reason} | 责任: {anomaly.department}</div>
+                                                 </div>
+                                             </div>
+                                             <div className="text-right">
+                                                 <div className="text-cyber-orange font-bold font-mono">{anomaly.durationDays} 天</div>
+                                                 <div className="text-cyber-muted opacity-60 text-[10px]">{new Date(anomaly.startTime).toLocaleDateString()}</div>
+                                             </div>
                                          </div>
                                      ))}
                                  </div>
@@ -615,26 +664,36 @@ export const Workstation: React.FC<WorkstationProps> = ({ orders, models, holida
                                         <div className={`absolute -top-3 right-4 text-[10px] bg-cyber-card px-2 py-0.5 border rounded select-none z-10 ${isModuleFullyComplete ? 'text-green-500 border-green-500/50' : 'text-cyber-muted border-cyber-muted/20'}`}>进度: {moduleCompleted}/{steps.length}</div>
                                         {isExpanded && (
                                             <div className="p-4 animate-fade-in">
-                                                <div className="grid grid-cols-7 gap-1 mb-2 text-center">{['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map(day => (<div key={day} className="text-[10px] text-cyber-muted uppercase tracking-wider font-bold py-1 bg-cyber-bg/50 border border-cyber-muted/10">{day}</div>))}</div>
-                                                <div className="space-y-1">
+                                                <div className="space-y-4">
                                                     {sortedWeekKeys.map(weekKey => {
                                                         const weekData = weeks[weekKey];
                                                         const weekDate = new Date(weekKey);
                                                         return (
-                                                            <div key={weekKey} className="relative group/week">
+                                                            <div key={weekKey} className="relative group/week space-y-1">
+                                                                <div className="grid grid-cols-7 gap-1 text-center">
+                                                                    {['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map((day, idx) => {
+                                                                        const headerDate = new Date(weekDate);
+                                                                        headerDate.setDate(headerDate.getDate() + idx);
+                                                                        const dateStr = `${headerDate.getMonth() + 1}/${headerDate.getDate().toString().padStart(2, '0')}`;
+                                                                        return (
+                                                                            <div key={day} className="text-[9px] text-white uppercase tracking-widest font-bold py-0.5 bg-cyber-bg/40 border border-cyber-muted/5 whitespace-nowrap px-1">
+                                                                                {day} <span className="ml-1">({dateStr})</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
                                                                 <div className="grid grid-cols-7 gap-1 min-h-[60px] border-b border-cyber-muted/5 pb-1">
                                                                     {[0, 1, 2, 3, 4, 5, 6].map(dayIndex => {
                                                                         const targetJsDay = (dayIndex + 1) % 7;
                                                                         const dayInfo = weekData.find(d => d.date.getDay() === targetJsDay);
                                                                         return (
                                                                             <div key={dayIndex} className="bg-cyber-bg/20 border border-cyber-muted/5 p-1 relative min-h-[60px]">
-                                                                                {dayIndex === 0 && <div className="absolute top-1 right-1 text-[9px] text-white/70 font-mono leading-none pointer-events-none">{weekDate.getMonth()+1}/{weekDate.getDate()}</div>}
                                                                                 <div className="flex flex-col gap-1">
                                                                                     {dayInfo?.items.map((item, i) => {
                                                                                         if (item.type === 'ANOMALY') {
                                                                                             return (
-                                                                                                <div key={`anomaly-${item.data.id}-${i}`} className="bg-red-500/10 border border-red-500/30 text-red-400 p-1 rounded text-[10px] flex items-center gap-1 truncate font-bold animate-pulse" title={`异常: ${item.data.reason} (${item.data.department})`}>
-                                                                                                    <AlertTriangle size={10} className="flex-shrink-0" />
+                                                                                                <div key={`anomaly-${item.data.id}-${i}`} className={`${item.data.anomalyStatus === 'HALTED' ? 'bg-red-500/20 border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.3)]' : 'bg-red-500/10 border-red-500/30'} border text-red-400 p-1 rounded text-[10px] flex items-center gap-1 truncate font-bold animate-pulse`} title={`异常: ${item.data.reason} (${item.data.department})`}>
+                                                                                                    {item.data.anomalyStatus === 'HALTED' ? <PauseOctagon size={10} className="flex-shrink-0" /> : <AlertTriangle size={10} className="flex-shrink-0" />}
                                                                                                     <span className="truncate">{item.data.reason}</span>
                                                                                                 </div>
                                                                                             );

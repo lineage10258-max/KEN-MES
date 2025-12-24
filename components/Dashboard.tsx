@@ -1,7 +1,6 @@
-
 import React, { useMemo, useState } from 'react';
-import { WorkOrder, MachineModel, MachineStatus, ProcessStep } from '../types';
-import { Calendar, MapPin, Brain, Sparkles, RefreshCw, Factory, AlertTriangle, CheckCircle2, BarChart3 } from 'lucide-react';
+import { WorkOrder, MachineModel, MachineStatus, ProcessStep, StepState } from '../types';
+import { Calendar, MapPin, Brain, Sparkles, RefreshCw, Factory, AlertTriangle, CheckCircle2, BarChart3, AlertOctagon } from 'lucide-react';
 import { generateFactoryInsight } from '../services/geminiService';
 import { calculateProjectedDate } from '../services/holidayService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -13,14 +12,12 @@ interface DashboardProps {
 
 /**
  * Shared Helper to calculate the real-time dynamic production completion date.
- * Replicates the logic used in Workstation.tsx for consistency.
  */
 const getDynamicProjectedDate = (order: WorkOrder, models: MachineModel[]) => {
   const model = models.find(m => m.id === order.modelId);
   if (!model) return new Date(order.estimatedCompletionDate);
   if (order.status === MachineStatus.COMPLETED) return new Date(order.estimatedCompletionDate);
 
-  // 1. Calculate remaining hours based on uncompleted steps
   let remainingHours = 0;
   const getRemainingHoursForStep = (s: ProcessStep) => {
     const status = order.stepStates?.[s.id]?.status;
@@ -41,7 +38,6 @@ const getDynamicProjectedDate = (order: WorkOrder, models: MachineModel[]) => {
     remainingHours = Math.max(0, ...Object.values(moduleRemaining));
   }
 
-  // 2. Project Date from NOW
   const now = new Date();
   const holidayType = order.holidayType || 'DOUBLE';
   return calculateProjectedDate(now, remainingHours, holidayType);
@@ -54,6 +50,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
   
   const [aiInsight, setAiInsight] = useState<string>('');
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
+
+  const formatMMDD = (date: Date | string | undefined) => {
+    if (!date) return '-';
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '-';
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  };
 
   const handleGenerateInsight = async () => {
     setIsAiLoading(true);
@@ -89,14 +92,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
     const monthlyRate = monthlyPlanned > 0 ? Math.round((monthlyActual / monthlyPlanned) * 100) : 0;
 
     const yearlyPlanned = orders.filter(o => isThisYear(o.businessClosingDate)).length;
-    const yearlyActual = orders.filter(o => o.status === MachineStatus.COMPLETED && isThisYear(o.estimatedCompletionDate)).length;
+    const yearlyActual = orders.filter(o => o.status === MachineStatus.COMPLETED && isThisMonth(o.estimatedCompletionDate)).length;
     const yearlyRate = yearlyPlanned > 0 ? Math.round((yearlyActual / yearlyPlanned) * 100) : 0;
 
     const monthlyStarts = orders
         .filter(o => isThisMonth(o.startDate))
         .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
     
-    // ADJUSTMENT: Use dynamic projected production completion date for filtering the "Completion Plan"
     const monthlyCompletes = orders
         .map(o => ({ order: o, dynamicDate: getDynamicProjectedDate(o, models) }))
         .filter(item => isThisMonth(item.dynamicDate))
@@ -213,12 +215,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
                     <p>{realtimeTab === 'ALL' ? '当前无正在进行中的生产任务' : `${realtimeTab} 车间当前无正在进行中的生产任务`}</p>
                 </div>
             ) : (
-                filteredRealtimeOrders.map(order => <OrderCard key={order.id} order={order} models={models} />)
+                filteredRealtimeOrders.map(order => <OrderCard key={order.id} order={order} models={models} formatMMDD={formatMMDD} />)
             )}
             
             <h2 className="text-lg font-display font-bold text-cyber-muted mt-8 border-b border-cyber-muted/30 pb-2">归档日志</h2>
              {orders.filter(o => o.status === MachineStatus.COMPLETED).map(order => (
-                <OrderCard key={order.id} order={order} models={models} compact />
+                <OrderCard key={order.id} order={order} models={models} compact formatMMDD={formatMMDD} />
             ))}
         </div>
 
@@ -236,10 +238,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
                      </div>
                  ) : (
                      <ResponsiveContainer width="100%" height="100%">
-                         <BarChart data={anomalyChartData.data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                         <BarChart data={anomalyChartData.data} margin={{ top: 10, right: 10, left: -5, bottom: 0 }}>
                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                              <XAxis dataKey="name" stroke="#94a3b8" tick={{fontSize: 10}} axisLine={false} tickLine={false} />
-                             <YAxis stroke="#94a3b8" tick={{fontSize: 10}} axisLine={false} tickLine={false} width={30} label={{ value: '天数', angle: -90, position: 'insideLeft', fill: '#64748b', fontSize: 10 }} />
+                             <YAxis 
+                                stroke="#94a3b8" 
+                                tick={{fontSize: 10}} 
+                                axisLine={false} 
+                                tickLine={false} 
+                                width={35} 
+                                type="number"
+                                domain={[0, 180]}
+                                ticks={[45, 90, 135, 180]}
+                                interval={0}
+                             />
                              <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f1f5f9', fontSize: '12px' }} itemStyle={{ padding: 0 }} cursor={{fill: 'rgba(255,255,255,0.05)'}} formatter={(value: number, name: string) => [`${value.toFixed(1)}天`, `${name}`]} />
                              <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} iconType="circle" />
                              {anomalyChartData.activeDepartments.map((dept, index) => (
@@ -298,13 +310,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
                     <div className="space-y-2">
                         {displayedSchedule.map((order: any) => {
                              const dateToDisplay = scheduleMode === 'START' ? order.startDate : (order.dynamicProjectedDate || order.estimatedCompletionDate);
-                             const dateObj = new Date(dateToDisplay);
                              return (
                                 <div key={order.id} className="bg-cyber-bg/40 border border-cyber-muted/20 p-3 hover:border-cyber-blue/50 transition-colors group animate-fade-in">
                                     <div className="flex justify-between items-start mb-2">
                                         <span className="font-bold font-mono text-white text-sm group-hover:text-cyber-blue transition-colors">{order.id}</span>
                                         <span className={`text-xs font-mono border px-1 ${scheduleMode === 'START' ? 'text-cyber-orange border-cyber-orange/30 bg-cyber-orange/5' : 'text-green-400 border-green-500/30 bg-green-500/5'}`}>
-                                            {dateObj.getMonth() + 1}/{dateObj.getDate()}
+                                            {formatMMDD(dateToDisplay)}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-center text-xs font-mono text-cyber-muted">
@@ -332,7 +343,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
                  {isAiLoading ? (
                      <div className="flex flex-col items-center justify-center h-full text-cyber-blue py-8">
                          <Sparkles className="animate-spin mb-2" size={24} />
-                         <span className="animate-pulse">正在分析全厂数据...</span>
+                         <span className="animate-pulse">正在 analysis 全厂数据...</span>
                      </div>
                  ) : aiInsight ? (
                      <div className="prose prose-invert prose-sm max-w-none">
@@ -369,15 +380,28 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, unit, theme }) => {
     );
 };
 
-interface OrderCardProps { order: WorkOrder; models: MachineModel[]; compact?: boolean; }
-const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false }) => {
+interface OrderCardProps { order: WorkOrder; models: MachineModel[]; compact?: boolean; formatMMDD: (d: any) => string; }
+const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false, formatMMDD }) => {
     const model = models.find(m => m.id === order.modelId);
     const totalSteps = model?.steps.length || 0;
-    const progress = Math.round((order.currentStepIndex / totalSteps) * 100);
-    const currentStepName = model?.steps[order.currentStepIndex]?.name || (order.status === 'COMPLETED' ? '待出货' : '未知');
+    
+    const doneCount = useMemo(() => {
+        return (Object.values(order.stepStates || {}) as StepState[]).filter(s => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
+    }, [order.stepStates]);
+
+    const progress = Math.round((doneCount / totalSteps) * 100);
+    
+    const currentStepName = useMemo(() => {
+        if (order.status === 'COMPLETED') return '待出貨';
+        const nextStep = model?.steps.find(s => {
+            const state = order.stepStates?.[s.id];
+            return !state || (state.status !== 'COMPLETED' && state.status !== 'SKIPPED');
+        });
+        return nextStep?.name || '機台整改';
+    }, [order.status, order.stepStates, model]);
+
     const projectedDate = getDynamicProjectedDate(order, models);
     const closingDate = order.businessClosingDate ? new Date(order.businessClosingDate) : null;
-    const startDate = new Date(order.startDate);
     
     let variance = 0;
     if (closingDate) {
@@ -386,6 +410,30 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false })
         const diffTime = p.getTime() - c.getTime();
         variance = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     }
+
+    const anomalySummary = useMemo(() => {
+        if (!order.anomalies || order.anomalies.length === 0) return null;
+        
+        const deptMap: Record<string, number> = {};
+        order.anomalies.forEach(a => {
+            const dept = a.department || '未分类';
+            const days = parseFloat(a.durationDays || '0');
+            deptMap[dept] = (deptMap[dept] || 0) + days;
+        });
+
+        const sortedEntries = Object.entries(deptMap).sort((a, b) => b[1] - a[1]);
+        const formatDays = (d: number) => d % 1 === 0 ? d.toString() : d.toFixed(1);
+
+        const displayStr = sortedEntries
+            .map(([dept, days]) => `${dept}${formatDays(days)}`)
+            .join('/');
+
+        const tooltipStr = "異常責任明細：\n" + sortedEntries
+            .map(([dept, days]) => `• ${dept}: ${formatDays(days)} 天`)
+            .join('\n');
+
+        return { displayStr, tooltipStr };
+    }, [order.anomalies]);
 
     if (compact) {
         return (
@@ -407,8 +455,12 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false })
                     <div className="flex items-center gap-2">
                         {order.clientName && <span className="bg-cyber-blue/20 text-cyber-blue text-[10px] px-1.5 py-0.5 rounded border border-cyber-blue/30 font-mono">{order.clientName.charAt(0)}</span>}
                         <h4 className="text-base font-display font-bold text-white tracking-wide">{order.id}</h4>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono border ml-1 ${order.status === 'IN_PROGRESS' ? 'border-cyber-blue/50 text-cyber-blue bg-cyber-blue/10' : 'border-cyber-muted/50 text-cyber-muted bg-white/5'}`}>
-                            [{order.status === 'IN_PROGRESS' ? '进行中' : order.status === 'PLANNED' ? '计划中' : order.status}]
+                        <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono border ml-1 ${
+                            progress === 100 && order.status === 'IN_PROGRESS' 
+                            ? 'border-green-400 text-green-400 bg-green-400/20 shadow-[0_0_10px_rgba(74,222,128,0.3)] animate-pulse'
+                            : order.status === 'IN_PROGRESS' ? 'border-cyber-blue/50 text-cyber-blue bg-cyber-blue/10' : 'border-cyber-muted/50 text-cyber-muted bg-white/5'
+                        }`}>
+                            [{progress === 100 && order.status === 'IN_PROGRESS' ? '待歸檔/完工' : order.status === 'IN_PROGRESS' ? '进行中' : order.status === 'PLANNED' ? '计划中' : order.status}]
                         </span>
                     </div>
                     <span className="flex items-baseline gap-1 text-[10px] font-mono text-cyber-muted leading-none">
@@ -417,38 +469,48 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false })
                     </span>
                 </div>
                 <div className="flex gap-1.5 items-center">
+                    <div 
+                        className={`flex flex-col items-center justify-center min-w-[84px] h-10 px-2 rounded border shadow-sm transition-all cursor-help ${anomalySummary ? 'border-red-500/50 bg-red-500/10' : 'border-cyber-muted/20 bg-cyber-bg/20 opacity-40'}`}
+                        title={anomalySummary?.tooltipStr || '目前無異常記錄'}
+                    >
+                        <span className={`text-[9px] font-bold block leading-none mb-1 ${anomalySummary ? 'text-red-400' : 'text-cyber-muted'}`}>異常(天)</span>
+                        <div className={`text-[10px] font-bold leading-none truncate max-w-[150px] ${anomalySummary ? 'text-red-500 animate-pulse' : 'text-cyber-muted'}`}>
+                            {anomalySummary ? anomalySummary.displayStr : '0'}
+                        </div>
+                    </div>
+
                     <div className={`flex flex-col items-center justify-center w-16 h-10 rounded border shadow-sm ${variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'}`}>
-                        <span className="text-[10px] text-white font-bold block drop-shadow-md leading-none mb-0.5">差异天数</span>
+                        <span className="text-[10px] text-white font-bold block drop-shadow-md leading-none mb-0.5">差異天數</span>
                         <div className={`flex items-center gap-0.5 text-sm font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>
                             {variance > 0 && <AlertTriangle size={10}/>}
                             {variance > 0 ? `+${variance}` : variance}
                         </div>
                     </div>
                     <div className="flex flex-col items-center justify-center w-16 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">生产完工</span>
-                        <span className="text-sm font-bold text-cyber-blue leading-none">{projectedDate.getMonth() + 1}/{projectedDate.getDate()}</span>
+                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">生產完工</span>
+                        <span className="text-sm font-bold text-cyber-blue leading-none">{formatMMDD(projectedDate)}</span>
                     </div>
                     <div className={`flex flex-col items-center justify-center w-16 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'}`}>
-                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">业务结关</span>
-                        <span className={`text-sm font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-white'}`}>{closingDate ? `${closingDate.getMonth() + 1}/${closingDate.getDate()}` : '-'}</span>
+                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">業務結關</span>
+                        <span className={`text-sm font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-white'}`}>{closingDate ? formatMMDD(closingDate) : '-'}</span>
                     </div>
                     <div className="flex flex-col items-center justify-center w-16 h-10 rounded border border-cyber-muted/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">计划上线</span>
-                        <span className="text-sm font-bold text-white drop-shadow-md leading-none">{startDate.getMonth() + 1}/{startDate.getDate()}</span>
+                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">計畫上線</span>
+                        <span className="text-sm font-bold text-white drop-shadow-md leading-none">{formatMMDD(order.startDate)}</span>
                     </div>
                 </div>
             </div>
             <div className="relative z-10">
                 <div className="flex mb-0.5 items-center font-mono text-[10px] gap-3">
                      <div className="text-cyber-muted flex items-center gap-1 opacity-90 border border-cyber-muted/30 px-1.5 py-0 rounded bg-cyber-bg/50"><Factory size={10} />{order.workshop}</div>
-                    <div className="text-cyber-orange font-bold text-xs">{progress}%</div>
+                    <div className={`font-bold text-xs ${progress === 100 ? 'text-green-400' : 'text-cyber-orange'}`}>{progress}%</div>
                      <div className="flex items-center gap-2 overflow-hidden">
-                         <span className="text-cyber-blue opacity-80 whitespace-nowrap">工序 {order.currentStepIndex + 1}/{totalSteps}</span>
+                         <span className="text-cyber-blue opacity-80 whitespace-nowrap">已完工 {doneCount}/{totalSteps}</span>
                         <span className="text-white font-medium truncate">{currentStepName}</span>
                      </div>
                 </div>
                 <div className="overflow-hidden h-1 text-[10px] flex bg-cyber-bg border border-cyber-blue/20">
-                    <div style={{ width: `${progress}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-cyber-blue shadow-[0_0_10px_#00f0ff] transition-all duration-500"></div>
+                    <div style={{ width: `${progress}%` }} className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${progress === 100 ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-cyber-blue shadow-[0_0_10px_#00f0ff]'}`}></div>
                 </div>
             </div>
         </div>

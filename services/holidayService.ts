@@ -1,4 +1,3 @@
-
 import { HolidayType, HolidayRule } from "../types";
 
 // Helper to get ISO Week Number
@@ -94,22 +93,29 @@ export const calculateProjectedDate = (
     holidayType: HolidayType,
     customRules: Record<HolidayType, HolidayRule> = DEFAULT_HOLIDAY_RULES
 ): Date => {
-    if (hoursNeeded <= 0) return startFromDate;
+    if (hoursNeeded <= 0) return new Date(startFromDate);
 
-    let daysNeeded = Math.ceil(hoursNeeded / 8);
+    // 將剩餘工時轉換為所需天數，以每日 8 小時為計算基准
+    let daysRemaining = Math.ceil(hoursNeeded / 8);
     let currentDate = new Date(startFromDate);
     const rule = customRules[holidayType];
 
-    // Safety break to prevent infinite loops
+    // 安全計數器，防止無限循環
     let iterations = 0;
-    const MAX_ITERATIONS = 365 * 2; 
+    const MAX_ITERATIONS = 730; 
 
-    while (daysNeeded > 0 && iterations < MAX_ITERATIONS) {
-        // Move to next day
+    // 優化後的邏輯：如果起始日期（通常是今天）是工作日，則應該從今天開始抵扣工時。
+    // 這確保了如果剩餘 8 小時工作，且今天是工作日，完工日將顯示為「今天」。
+    if (isWorkingDay(currentDate, rule)) {
+        daysRemaining--;
+    }
+
+    // 如果還有剩餘天數需要完成，則繼續往後尋找工作日
+    while (daysRemaining > 0 && iterations < MAX_ITERATIONS) {
         currentDate.setDate(currentDate.getDate() + 1);
         
         if (isWorkingDay(currentDate, rule)) {
-            daysNeeded--;
+            daysRemaining--;
         }
         iterations++;
     }

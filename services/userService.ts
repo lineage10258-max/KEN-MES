@@ -30,17 +30,24 @@ const mapFromDb = (row: any): AppUser => ({
     lastLogin: row.last_login
 });
 
-// Helper: Standardize Error Throwing
+// Helper: Standardize Error Throwing with better serialization
 const throwError = (context: string, error: any) => {
-    // Log full object for debugging
-    console.error(`${context} Error Object:`, error);
+    console.error(`${context} Full Error:`, error);
     
-    // Extract meaningful message
     let msg = '未知错误';
-    if (error?.message) msg = error.message;
-    else if (error?.details) msg = error.details;
-    else if (typeof error === 'string') msg = error;
-    else msg = JSON.stringify(error);
+    
+    if (error instanceof Error) {
+        msg = error.message;
+        // Check for common fetch failures
+        if (msg === 'Load failed' || msg === 'Failed to fetch') {
+            msg = '网络连接失败：请检查 Supabase 项目網址是否正確，或是否被防火墙/插件攔截。';
+        }
+    } else if (typeof error === 'object' && error !== null) {
+        // Handle Supabase specific error objects
+        msg = error.message || error.details || error.hint || JSON.stringify(error);
+    } else if (typeof error === 'string') {
+        msg = error;
+    }
 
     throw new Error(msg);
 };
@@ -53,7 +60,7 @@ export const userService = {
                 .from('app_users')
                 .select('*')
                 .eq('username', username)
-                .eq('password', password) // In production, hash this!
+                .eq('password', password)
                 .maybeSingle(); 
 
             if (error) throwError('Login', error);
@@ -74,7 +81,10 @@ export const userService = {
 
             return mapFromDb(data);
         } catch (e: any) {
-            if (e instanceof Error) throw e;
+            // Rethrow identified errors
+            if (e instanceof Error && (e.message.includes('网络') || e.message.includes('连接'))) {
+                throw e;
+            }
             throwError('Login Exception', e);
             return null;
         }
@@ -82,13 +92,18 @@ export const userService = {
 
     // 2. Get All Users
     getAll: async (): Promise<AppUser[]> => {
-        const { data, error } = await supabase
-            .from('app_users')
-            .select('*')
-            .order('created_at', { ascending: false });
+        try {
+            const { data, error } = await supabase
+                .from('app_users')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-        if (error) throwError('GetAll', error);
-        return (data || []).map(mapFromDb);
+            if (error) throwError('GetAll', error);
+            return (data || []).map(mapFromDb);
+        } catch (e) {
+            throwError('GetAll Exception', e);
+            return [];
+        }
     },
 
     // 3. Create User
@@ -152,7 +167,6 @@ export const userService = {
             .single();
 
         if (error) {
-             // Fallback: If DB schema is outdated, retry without permissions column
              if (error.message?.includes('allowed_views') || error.message?.includes('schema cache')) {
                 console.warn("Migration missing: 'allowed_views' column not found. Retrying update without permissions.");
                 delete payload.allowed_views;
@@ -174,7 +188,6 @@ export const userService = {
 
     // 5. Delete User
     delete: async (id: string): Promise<void> => {
-        // Request 'exact' count to verify deletion actually happened (catches RLS silent failures)
         const { error, count } = await supabase
             .from('app_users')
             .delete({ count: 'exact' }) 
@@ -182,8 +195,6 @@ export const userService = {
         
         if (error) throwError('DeleteUser', error);
 
-        // If count is 0, it means no rows were deleted. 
-        // This usually happens if the ID doesn't exist OR RLS policy blocked the delete silently.
         if (count === null || count === 0) {
             throw new Error("删除失败：数据库未受影響。请检查用户是否存在，或是否具有删除权限 (RLS Policy)。");
         }

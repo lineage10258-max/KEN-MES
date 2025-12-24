@@ -1,4 +1,3 @@
-
 import { supabase } from '../supabaseClient';
 import { WorkOrder, AnomalyRecord } from '../types';
 
@@ -23,7 +22,6 @@ const mapFromDb = (row: any): WorkOrder => ({
     clientName: row.client_name,
     axisHead: row.axis_head,
     toolHolderSpec: row.tool_holder_spec,
-    // Fix: Correct property name from magazine_count to magazineCount to match WorkOrder interface
     magazineCount: row.magazine_count,
     zAxisTravel: row.z_axis_travel,
     spindleSpeed: row.spindle_speed,
@@ -37,9 +35,10 @@ const mapFromDb = (row: any): WorkOrder => ({
             stepName: err.step_name,
             reason: err.reason,
             department: err.department,
+            anomalyStatus: err.anomaly_status, // Map from snake_case
             startTime: err.start_time,
             endTime: err.end_time,
-            durationDays: err.duration_days, // CORRECTED: Map duration_days to durationDays
+            durationDays: err.duration_days,
             reportedAt: err.reported_at
         })) 
         : (row.anomalies || [])
@@ -54,22 +53,26 @@ const mapToDb = (order: WorkOrder) => ({
     workshop: order.workshop,
     start_date: order.startDate,
     estimated_completion_date: order.estimatedCompletionDate,
-    // FIXED: Correctly access originalEstimatedCompletionDate from the WorkOrder object
+    // Fix: Corrected property name to originalEstimatedCompletionDate
     original_estimated_completion_date: order.originalEstimatedCompletionDate,
     business_closing_date: order.businessClosingDate,
     holiday_type: order.holidayType,
     
     // New ERP Integration Fields
     project_name: order.projectName,
+    // Fix: Correctly access the property using camelCase naming defined in types.ts
     issuance_rate: order.issuanceRate,
     
+    // Fix: Corrected property name to clientName
     client_name: order.clientName,
+    // Fix: Correctly access the property using camelCase naming defined in types.ts
     axis_head: order.axisHead,
     tool_holder_spec: order.toolHolderSpec,
     magazine_count: order.magazineCount,
     z_axis_travel: order.zAxisTravel,
     spindle_speed: order.spindleSpeed,
     
+    // Fix: Property 'step_states' does not exist on type 'WorkOrder'. Corrected to stepStates.
     step_states: order.stepStates || {},
     logs: order.logs || [],
 });
@@ -144,6 +147,7 @@ export const orderApi = {
           step_name: anomaly.stepName,
           reason: anomaly.reason,
           department: anomaly.department,
+          anomaly_status: anomaly.anomalyStatus, // Save to database
           start_time: anomaly.startTime,
           end_time: anomaly.endTime || null,
           duration_days: anomaly.durationDays,
@@ -166,6 +170,7 @@ export const orderApi = {
           step_name: anomaly.stepName,
           reason: anomaly.reason,
           department: anomaly.department,
+          anomaly_status: anomaly.anomalyStatus,
           start_time: anomaly.startTime,
           end_time: anomaly.endTime || null,
           duration_days: anomaly.durationDays

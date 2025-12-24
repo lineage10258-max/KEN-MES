@@ -51,6 +51,7 @@ export interface ProcessStep {
   module: string; // 工序模组
   name: string;
   estimatedHours: number;
+  departments?: string[]; // New field: 责任部门 (Multi-select)
   description?: string;
 }
 
@@ -74,7 +75,8 @@ export interface AnomalyRecord {
   stepName: string; // 工序名称
   reason: string; // 异常原因
   department: string; // 责任单位
-  startTime: string; // 发生时间 (ISO)
+  anomalyStatus?: 'CONTINUOUS' | 'HALTED'; // 異常狀態: 持續生產 / 停工
+  startTime: string; //发生时间 (ISO)
   endTime: string; // 结束时间 (ISO)
   durationDays: string; // 自动计算异常天数
   reportedAt: string;

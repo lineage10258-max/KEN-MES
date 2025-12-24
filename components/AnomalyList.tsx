@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkOrder, MachineModel, AnomalyRecord } from '../types';
-import { Filter, Search, Calendar, AlertTriangle, AlertOctagon, Edit, Trash2, X, Save, CheckCircle } from 'lucide-react';
+import { Filter, Search, Calendar, AlertTriangle, AlertOctagon, Edit, Trash2, X, Save, CheckCircle, Zap, PauseOctagon } from 'lucide-react';
 
 interface AnomalyListProps {
   orders: WorkOrder[];
@@ -99,7 +98,6 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
   const handleEditClick = (item: any) => {
       setEditingAnomaly({
           ...item,
-          // FIX: Use local time formatting helper instead of substring to prevent timezone shifting
           startTime: formatLocalTimeForInput(item.startTime),
           endTime: item.endTime ? formatLocalTimeForInput(item.endTime) : ''
       });
@@ -168,7 +166,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
               stepName: editingAnomaly.stepName,
               reason: editingAnomaly.reason,
               department: editingAnomaly.department,
-              // Convert Local Input Time back to ISO String for storage
+              anomalyStatus: editingAnomaly.anomalyStatus,
               startTime: new Date(editingAnomaly.startTime).toISOString(),
               endTime: editingAnomaly.endTime ? new Date(editingAnomaly.endTime).toISOString() : '',
               durationDays: editingAnomaly.durationDays,
@@ -222,24 +220,43 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">责任单位</label>
-                            <select 
-                                value={editingAnomaly.department}
-                                onChange={(e) => handleEditChange('department', e.target.value)}
-                                className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
-                            >
-                                <option value="生产">生产</option>
-                                <option value="电控">电控</option>
-                                <option value="KA">KA</option>
-                                <option value="应用">应用</option>
-                                <option value="采购">采购</option>
-                                <option value="生管">生管</option>
-                                <option value="仓库">仓库</option>
-                                <option value="设计">设计</option>
-                                <option value="业务">业务</option>
-                                <option value="其他">其他</option>
-                            </select>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">责任单位</label>
+                                <select 
+                                    value={editingAnomaly.department}
+                                    onChange={(e) => handleEditChange('department', e.target.value)}
+                                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-orange focus:outline-none text-sm"
+                                >
+                                    <option value="生产">生产</option>
+                                    <option value="电控">电控</option>
+                                    <option value="KA">KA</option>
+                                    <option value="应用">应用</option>
+                                    <option value="采购">采购</option>
+                                    <option value="生管">生管</option>
+                                    <option value="仓库">仓库</option>
+                                    <option value="设计">设计</option>
+                                    <option value="业务">业务</option>
+                                    <option value="其他">其他</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">異常狀態</label>
+                                <div className="flex bg-cyber-bg border border-cyber-muted/30 rounded p-1 gap-1">
+                                    <button 
+                                        onClick={() => handleEditChange('anomalyStatus', 'CONTINUOUS')}
+                                        className={`flex-1 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all ${editingAnomaly.anomalyStatus === 'CONTINUOUS' ? 'bg-cyber-blue text-black shadow-neon-blue' : 'text-cyber-muted hover:text-white'}`}
+                                    >
+                                        持續生產
+                                    </button>
+                                    <button 
+                                        onClick={() => handleEditChange('anomalyStatus', 'HALTED')}
+                                        className={`flex-1 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all ${editingAnomaly.anomalyStatus === 'HALTED' ? 'bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'text-cyber-muted hover:text-white'}`}
+                                    >
+                                        停工
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -384,18 +401,19 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                         <tr className="border-b border-cyber-blue/30 bg-cyber-blue/5 text-cyber-blue text-xs uppercase tracking-wider">
                             <th className="p-4 w-[140px]">发生时间</th>
                             <th className="p-4 w-[120px]">机台号</th>
+                            <th className="p-4 w-[130px]">状态</th>
                             <th className="p-4 w-[120px]">车间</th>
                             <th className="p-4 w-[150px]">工序名称</th>
                             <th className="p-4">异常原因描述</th>
                             <th className="p-4 w-[100px]">责任单位</th>
-                            <th className="p-4 w-[100px] text-right">影响天数</th>
+                            <th className="p-4 w-[80px] text-right">天数</th>
                             <th className="p-4 w-[100px] text-right">操作</th>
                         </tr>
                     </thead>
                     <tbody className="text-sm divide-y divide-cyber-muted/10">
                         {filteredAnomalies.length === 0 ? (
                             <tr>
-                                <td colSpan={8} className="p-8 text-center text-cyber-muted">
+                                <td colSpan={9} className="p-8 text-center text-cyber-muted">
                                     <div className="flex flex-col items-center justify-center opacity-50">
                                         <AlertTriangle size={48} className="mb-2"/>
                                         <span>暂无符合筛选条件的异常记录</span>
@@ -411,6 +429,12 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                                     </td>
                                     <td className="p-4 font-bold text-white group-hover:text-cyber-blue transition-colors">
                                         {item.orderId}
+                                    </td>
+                                    <td className="p-4">
+                                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap ${item.anomalyStatus === 'HALTED' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-cyber-blue/10 text-cyber-blue border border-cyber-blue/20'}`}>
+                                            {item.anomalyStatus === 'HALTED' ? <PauseOctagon size={12} /> : <Zap size={12} />}
+                                            {item.anomalyStatus === 'HALTED' ? '停工' : '持續生產'}
+                                        </div>
                                     </td>
                                     <td className="p-4 text-cyber-muted">
                                         {item.workshop}

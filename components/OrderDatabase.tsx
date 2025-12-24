@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MachineModel, WorkOrder, MachineStatus, HolidayType } from '../types';
 import { calculateProjectedDate } from '../services/holidayService';
-import { Plus, Calendar, Disc, Hash, Factory, Save, Filter, Edit, Trash2, X, User, Settings, CalendarClock, Lock, FileDown, Upload, Search, ChevronDown, CheckSquare, Square, Layers, Download, PauseCircle, PlayCircle } from 'lucide-react';
+import { Plus, Calendar, Disc, Hash, Factory, Save, Filter, Edit, Trash2, X, User, Settings, CalendarClock, Lock, FileDown, Upload, Search, ChevronDown, CheckSquare, Square, Layers, Download, PauseCircle, PlayCircle, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface OrderDatabaseProps {
@@ -249,6 +249,17 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
     { value: 'COMPLETED', label: 'COMPLETED (已完成)', color: 'text-green-500' } 
   ];
 
+  // 計算當前進度 %
+  const currentProgress = useMemo(() => {
+      if (!editingOrderId) return 0;
+      const model = models.find(m => m.id === selectedModelId);
+      if (!model) return 0;
+      const total = model.steps.length;
+      if (total === 0) return 0;
+      const done = Object.values(existingStepStates).filter((s: any) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
+      return Math.round((done / total) * 100);
+  }, [editingOrderId, selectedModelId, existingStepStates, models]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex border-b border-cyber-blue/30 mb-6">
@@ -293,35 +304,68 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                     <div className="space-y-6">
                         {editingOrderId && (
                             <div className="p-4 bg-cyber-bg/60 border border-cyber-blue/20 rounded mb-4">
-                                <label className="block text-xs font-mono text-cyber-muted mb-3 uppercase tracking-wider">当前状态控制</label>
-                                <div className="flex items-center gap-4">
+                                <div className="flex justify-between items-center mb-3">
+                                    <label className="block text-xs font-mono text-cyber-muted uppercase tracking-wider">当前状态控制</label>
+                                    <span className={`text-xs font-bold font-mono ${currentProgress === 100 ? 'text-green-400' : 'text-cyber-blue'}`}>
+                                        进度: {currentProgress}%
+                                    </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3">
                                     <div className={`px-3 py-2 border rounded font-mono text-sm ${
                                         existingStatus === MachineStatus.IN_PROGRESS ? 'border-cyber-blue text-cyber-blue bg-cyber-blue/5' :
                                         existingStatus === MachineStatus.HALTED ? 'border-red-500 text-red-500 bg-red-500/5 shadow-[0_0_10px_rgba(239,68,68,0.2)]' :
+                                        existingStatus === MachineStatus.COMPLETED ? 'border-green-500 text-green-400 bg-green-500/10' :
                                         'border-cyber-muted text-cyber-muted bg-white/5'
                                     }`}>
-                                        状态: {existingStatus === MachineStatus.IN_PROGRESS ? '进行中' : existingStatus === MachineStatus.HALTED ? '暂停生产' : existingStatus}
+                                        状态: {
+                                            existingStatus === MachineStatus.IN_PROGRESS ? '进行中' : 
+                                            existingStatus === MachineStatus.HALTED ? '暂停生产' : 
+                                            existingStatus === MachineStatus.COMPLETED ? '已完工' : existingStatus
+                                        }
                                     </div>
                                     
                                     {existingStatus === MachineStatus.IN_PROGRESS && (
-                                        <button 
-                                            onClick={() => setExistingStatus(MachineStatus.HALTED)}
-                                            className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] group"
-                                        >
-                                            <PauseCircle size={18} className="group-hover:scale-110 transition-transform" /> 暫停生產
-                                        </button>
+                                        <>
+                                            <button 
+                                                onClick={() => setExistingStatus(MachineStatus.HALTED)}
+                                                className="flex items-center gap-2 bg-red-500/20 border border-red-500 text-red-400 hover:bg-red-500 hover:text-white font-bold py-2 px-3 rounded text-xs transition-all"
+                                            >
+                                                <PauseCircle size={14} /> 暫停生產
+                                            </button>
+                                            {currentProgress === 100 && (
+                                                <button 
+                                                    onClick={() => setExistingStatus(MachineStatus.COMPLETED)}
+                                                    className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-all shadow-[0_0_15px_rgba(34,197,94,0.5)] animate-pulse"
+                                                >
+                                                    <Archive size={16} /> 結案/歸檔
+                                                </button>
+                                            )}
+                                        </>
                                     )}
                                     
                                     {existingStatus === MachineStatus.HALTED && (
                                         <button 
                                             onClick={() => setExistingStatus(MachineStatus.IN_PROGRESS)}
-                                            className="flex items-center gap-2 bg-cyber-blue hover:bg-white text-black font-bold py-2 px-4 rounded transition-all shadow-neon-blue group"
+                                            className="flex items-center gap-2 bg-cyber-blue/20 border border-cyber-blue text-cyber-blue hover:bg-cyber-blue hover:text-black font-bold py-2 px-3 rounded text-xs transition-all"
                                         >
-                                            <PlayCircle size={18} className="group-hover:scale-110 transition-transform" /> 恢復生產
+                                            <PlayCircle size={14} /> 恢復生產
                                         </button>
                                     )}
+
+                                    {existingStatus === MachineStatus.COMPLETED && (
+                                         <button 
+                                            onClick={() => setExistingStatus(MachineStatus.IN_PROGRESS)}
+                                            className="text-xs text-cyber-muted hover:text-white underline"
+                                         >
+                                             取消結案 (返回生產)
+                                         </button>
+                                    )}
                                 </div>
-                                <p className="text-[10px] text-cyber-muted mt-2 italic">* 暂停生产状态将反映在工作站与看板视图中。</p>
+                                <p className="text-[10px] text-cyber-muted mt-2 italic">
+                                    {currentProgress === 100 && existingStatus !== MachineStatus.COMPLETED 
+                                        ? "* 機台已完成 100%，請點擊結案按鈕完成歸檔。" 
+                                        : "* 狀態變更後請記得點擊下方「更新工單」保存。"}
+                                </p>
                             </div>
                         )}
 
