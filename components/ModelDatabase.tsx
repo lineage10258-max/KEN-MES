@@ -1,15 +1,15 @@
-
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { MachineModel, ProcessStep, ModelDatabaseProps } from '../types';
 import { Plus, Trash2, Save, Database, Cpu, FileDown, Upload, Edit, X, Calculator, Loader2, Users, Check, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const DEPT_MAP = [
-    { label: '生', fullName: '生產' },
-    { label: '電', fullName: '電控' },
-    { label: '品', fullName: '品檢' },
-    { label: '技', fullName: '技術' },
-    { label: '應', fullName: '應用' }
+    { label: '生', fullName: '生产' },
+    { label: '电', fullName: '电控' },
+    { label: '品', fullName: '品检' },
+    { label: '技', fullName: '技术' },
+    { label: '应', fullName: '应用' },
+    { label: '铲', fullName: '铲花' }
 ];
 
 const DeptToggleGroup: React.FC<{
@@ -147,14 +147,14 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
   // Excel Logic
   const handleDownloadTemplate = () => {
     const wsData = [
-      { "平线模组": "A线", "工序模组": "铸件基础", "工序名称": "底座安装", "部門別": "生產,技術", "预计工时": 4 },
-      { "平线模组": "A线", "工序模组": "主轴系统", "工序名称": "主轴校正", "部門別": "生產,品檢", "预计工时": 2.5 },
-      { "平线模组": "B线", "工序模组": "电气系统", "工序名称": "电气配线", "部門別": "電控", "预计工时": 8 }
+      { "平线模组": "A线", "工序模组": "铸件基础", "工序名称": "底座安装", "部门别": "生产,技术", "预计工时": 4 },
+      { "平线模组": "A线", "工序模组": "主轴系统", "工序名称": "主轴校正", "部门别": "生产,品检", "预计工时": 2.5 },
+      { "平线模组": "B线", "工序模组": "电气系统", "工序名称": "电气配线", "部门别": "电控", "预计工时": 8 }
     ];
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "工序模板");
-    XLSX.writeFile(wb, "工序導入模板_V2.xlsx");
+    XLSX.writeFile(wb, "工序导入模板_V2.xlsx");
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,7 +171,7 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
 
       const validDeptNames = DEPT_MAP.map(d => d.fullName);
       const mappedSteps = data.map((row: any) => {
-        const deptStr = String(row['部門別'] || row['Departments'] || '');
+        const deptStr = String(row['部门别'] || row['Departments'] || '');
         const departments = deptStr ? deptStr.split(',').map(d => d.trim()).filter(d => validDeptNames.includes(d)) : [];
         
         return {
@@ -186,7 +186,7 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
       if (mappedSteps.length > 0) {
         setSteps(mappedSteps);
       } else {
-        alert("未在文件中找到有效的工序数据。请確保列名為：'平线模组', '工序模组', '工序名称', '部門別', '预计工时'");
+        alert("未在文件中找到有效的工序数据。请确保列名为：'平线模组', '工序模组', '工序名称', '部门别', '预计工时'");
       }
       
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -206,13 +206,13 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
                 onClick={() => { setActiveTab('LIST'); setEditingId(null); }}
                 className={`px-6 py-3 font-mono text-sm transition-all ${activeTab === 'LIST' ? 'bg-cyber-blue/10 text-cyber-blue border-b-2 border-cyber-blue' : 'text-cyber-muted hover:text-white'}`}
             >
-                [ 數據庫視圖 ]
+                [ 数据库视图 ]
             </button>
             <button 
                 onClick={() => setActiveTab('CREATE')}
                 className={`px-6 py-3 font-mono text-sm transition-all ${activeTab === 'CREATE' ? 'bg-cyber-blue/10 text-cyber-blue border-b-2 border-cyber-blue' : 'text-cyber-muted hover:text-white'}`}
             >
-                [ {editingId ? '編輯工藝藍圖' : '新建工藝藍圖'} ]
+                [ {editingId ? '编辑工艺蓝图' : '新建工艺蓝图'} ]
             </button>
         </div>
 
@@ -225,11 +225,11 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-display font-bold text-white flex items-center gap-2">
                     {editingId ? <Edit className="text-cyber-orange" /> : <Plus className="text-cyber-blue" />}
-                    {editingId ? '編輯機型工藝配置' : '創建新機型工藝'}
+                    {editingId ? '编辑机型工艺配置' : '创建新机型工艺'}
                 </h2>
                 {editingId && (
                     <button onClick={handleCancelEdit} className="text-xs text-cyber-muted hover:text-white flex items-center gap-1">
-                        <X size={14}/> 取消編輯
+                        <X size={14}/> 取消编辑
                     </button>
                 )}
             </div>
@@ -238,7 +238,7 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider">機型名稱 / 代號</label>
+                            <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider">机型名称 / 代号</label>
                             <input 
                                 type="text" 
                                 value={newModelName}
@@ -250,35 +250,35 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
 
                         <div>
                             <label className="block text-xs font-mono text-cyber-orange mb-1 uppercase tracking-wider flex items-center gap-1">
-                                <Calculator size={12} /> 排程計算 (主線)
+                                <Calculator size={12} /> 排程计算 (主线)
                             </label>
                             <select 
                                 value={scheduleCalculationModule}
                                 onChange={(e) => setScheduleCalculationModule(e.target.value)}
                                 className="w-full bg-cyber-bg border border-cyber-muted/40 p-3 text-white focus:border-cyber-orange focus:outline-none font-mono text-sm"
                             >
-                                <option value="">-- 全工序彙總 (默認) --</option>
+                                <option value="">-- 全工序汇总 (默认) --</option>
                                 {uniqueParallelModules.map(mod => (
-                                    <option key={mod} value={mod}>{mod} (獨立計算)</option>
+                                    <option key={mod} value={mod}>{mod} (独立计算)</option>
                                 ))}
                             </select>
                         </div>
                     </div>
                     
                     <div className="flex flex-col justify-end pb-1">
-                        <label className="block text-xs font-mono text-cyber-muted mb-2 uppercase tracking-wider">批量導入工具</label>
+                        <label className="block text-xs font-mono text-cyber-muted mb-2 uppercase tracking-wider">批量导入工具</label>
                         <div className="flex gap-2">
                             <button 
                                 onClick={handleDownloadTemplate}
                                 className="flex-1 bg-cyber-bg border border-cyber-muted/40 hover:border-cyber-blue hover:text-cyber-blue text-cyber-muted p-2 flex items-center justify-center gap-2 text-xs font-mono transition-all"
                             >
-                                <FileDown size={14} /> 下載 Excel 模板
+                                <FileDown size={14} /> 下载 Excel 模板
                             </button>
                             <button 
                                 onClick={triggerFileUpload}
                                 className="flex-1 bg-cyber-bg border border-cyber-muted/40 hover:border-green-500 hover:text-green-400 text-cyber-muted p-2 flex items-center justify-center gap-2 text-xs font-mono transition-all"
                             >
-                                <Upload size={14} /> 導入 Excel 工序
+                                <Upload size={14} /> 导入 Excel 工序
                             </button>
                             <input 
                                 type="file" 
@@ -293,17 +293,17 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
 
                 <div>
                     <label className="block text-xs font-mono text-cyber-blue mb-3 uppercase tracking-wider flex items-center gap-2">
-                        <Users size={14}/> 生產工序流程配置
+                        <Users size={14}/> 生产工序流程配置
                     </label>
                     <div className="space-y-3">
                         {/* Headers */}
                         <div className="flex gap-3 px-2 mb-2 text-[10px] font-mono text-cyber-muted uppercase tracking-wider bg-cyber-bg/30 py-2 border-b border-cyber-muted/10">
                             <div className="w-8 text-center">#</div>
-                            <div className="w-[10%]">平線模組</div>
-                            <div className="w-[10%]">工序模組</div>
-                            <div className="w-[160px] text-cyber-blue">責任部門 (生/電/品/技/應)</div>
-                            <div className="flex-1">工序名稱</div>
-                            <div className="w-24">預計工時</div>
+                            <div className="w-[10%]">平线模组</div>
+                            <div className="w-[10%]">工序模组</div>
+                            <div className="w-[160px] text-cyber-blue">责任部门 (生/电/品/技/应/铲)</div>
+                            <div className="flex-1">工序名称</div>
+                            <div className="w-24">预计工时</div>
                             <div className="w-8"></div>
                         </div>
 
@@ -316,14 +316,14 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
                                     type="text" 
                                     value={step.parallelModule}
                                     onChange={(e) => handleStepChange(idx, 'parallelModule', e.target.value)}
-                                    placeholder="平線"
+                                    placeholder="平线"
                                     className="w-[10%] bg-cyber-bg border border-cyber-muted/40 p-2 text-cyber-orange focus:border-cyber-orange focus:outline-none font-mono text-xs"
                                 />
                                 <input 
                                     type="text" 
                                     value={step.module}
                                     onChange={(e) => handleStepChange(idx, 'module', e.target.value)}
-                                    placeholder="模組"
+                                    placeholder="模组"
                                     className="w-[10%] bg-cyber-bg border border-cyber-muted/40 p-2 text-cyber-blue focus:border-cyber-blue focus:outline-none font-mono text-xs"
                                 />
                                 <div className="w-[160px] flex items-center justify-center">
@@ -380,7 +380,7 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
                         className="bg-cyber-blue/10 hover:bg-cyber-blue text-cyber-blue hover:text-black border border-cyber-blue px-8 py-3 font-display font-bold uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-neon-blue"
                     >
                         {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                        {editingId ? '更新工藝藍圖' : '保存工藝藍圖'}
+                        {editingId ? '更新工艺蓝图' : '保存工艺蓝图'}
                     </button>
                 </div>
             </div>
@@ -401,7 +401,7 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
                      {model.scheduleCalculationModule && (
                          <div className="mb-4 text-xs font-mono text-cyber-orange border border-cyber-orange/30 px-2 py-1 bg-cyber-orange/5 inline-flex items-center gap-1 rounded">
                              <Calculator size={10} />
-                             排程依據: {model.scheduleCalculationModule}
+                             排程依据: {model.scheduleCalculationModule}
                          </div>
                      )}
 
@@ -419,26 +419,26 @@ export const ModelDatabase: React.FC<ModelDatabaseProps> = ({ models, onAddModel
                         {model.steps.length > 4 && (
                             <div className="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-cyber-card to-transparent flex items-end justify-center">
                                 <span className="text-[10px] text-cyber-blue font-mono mb-1">
-                                    + 還有 {model.steps.length - 4} 道工序
+                                    + 还有 {model.steps.length - 4} 道工序
                                 </span>
                             </div>
                         )}
                      </div>
 
                      <div className="flex justify-between items-center text-xs font-mono text-cyber-muted mt-4 pt-4 border-t border-cyber-muted/20">
-                         <span>總預計: {model.steps.reduce((acc, s) => acc + s.estimatedHours, 0)} 小時</span>
+                         <span>总预计: {model.steps.reduce((acc, s) => acc + s.estimatedHours, 0)} 小时</span>
                          <div className="flex gap-3">
                              <button 
                                 onClick={() => handleEditClick(model)}
                                 className="flex items-center gap-1 text-cyber-blue hover:text-white transition-colors"
                             >
-                                <Edit size={12} /> 編輯
+                                <Edit size={12} /> 编辑
                             </button>
                              <button 
                                 onClick={() => onDeleteModel(model.id)}
                                 className="flex items-center gap-1 text-cyber-muted hover:text-cyber-orange transition-colors"
                             >
-                                <Trash2 size={12} /> 刪除
+                                <Trash2 size={12} /> 删除
                             </button>
                          </div>
                      </div>

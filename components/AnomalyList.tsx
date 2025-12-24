@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkOrder, MachineModel, AnomalyRecord } from '../types';
 import { Filter, Search, Calendar, AlertTriangle, AlertOctagon, Edit, Trash2, X, Save, CheckCircle, Zap, PauseOctagon } from 'lucide-react';
@@ -179,7 +180,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in relative">
+    <div className="w-full space-y-6 animate-fade-in relative">
        
        {/* Edit Modal */}
        {showEditModal && editingAnomaly && (

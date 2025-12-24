@@ -59,7 +59,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       return { variance, projectedDate: projected };
   };
 
-  // 獲取今日異常數據
+  // 获取今日异常数据
   const todayAnomalies = useMemo(() => {
       if (!dailyScheduleWorkshop) return [];
       const today = new Date().toISOString().split('T')[0];
@@ -69,7 +69,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
           .filter(a => a.startTime.startsWith(today) || !a.endTime); 
   }, [dailyScheduleWorkshop, orders]);
 
-  // 獲取生產進度數據
+  // 获取生产进度数据
   const dailyScheduleData = useMemo(() => {
       if (!dailyScheduleWorkshop) return [];
       const todayStr = new Date().toDateString();
@@ -98,11 +98,11 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
               Object.entries(moduleGroups).forEach(([modName, steps]) => {
                   if (steps.every(s => o.stepStates?.[s.id]?.status === 'COMPLETED' || o.stepStates?.[s.id]?.status === 'SKIPPED')) return;
                   let targetStep = steps.find(s => o.stepStates?.[s.id]?.status === 'IN_PROGRESS');
-                  let statusStr = '進行中';
+                  let statusStr = '进行中';
                   if (!targetStep) {
                       const completed = steps.filter(s => o.stepStates?.[s.id]?.status === 'COMPLETED' || o.stepStates?.[s.id]?.status === 'SKIPPED');
                       targetStep = completed.length > 0 ? steps.find(s => !o.stepStates?.[s.id] || o.stepStates?.[s.id]?.status === 'PENDING') || steps[steps.length-1] : steps[0];
-                      statusStr = completed.length > 0 ? '待開工' : '待開工';
+                      statusStr = '待开工';
                   }
                   activeModuleDetails.push({ 
                     moduleName: modName, 
@@ -153,7 +153,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
         logging: false
     });
     const link = document.createElement("a");
-    link.download = `${dailyScheduleWorkshop}_日報_${new Date().toISOString().split('T')[0]}.jpg`;
+    link.download = `${dailyScheduleWorkshop}_日报_${new Date().toISOString().split('T')[0]}.jpg`;
     link.href = canvas.toDataURL("image/jpeg", 0.9);
     link.click();
   };
@@ -167,38 +167,38 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                       <div className="flex items-center gap-4">
                            <Factory size={32} className="text-cyber-orange" />
                            <div>
-                               <h2 className="text-2xl font-display font-bold text-white uppercase tracking-widest">{dailyScheduleWorkshop} 車間日排程動態</h2>
+                               <h2 className="text-2xl font-display font-bold text-white uppercase tracking-widest">{dailyScheduleWorkshop} 车间日排程动态</h2>
                                <p className="text-xs text-cyber-blue font-mono mt-0.5">{getHeaderDate()}</p>
                            </div>
                       </div>
                       <div className="flex gap-3 no-print">
-                          <button onClick={handleExportImage} className="flex items-center gap-1.5 bg-indigo-500/20 border border-indigo-500/50 text-indigo-400 px-4 py-2 rounded text-xs font-bold hover:bg-indigo-500 hover:text-white transition-all"><ImageIcon size={14} /> 導出圖片</button>
-                          <button onClick={() => handleExportDailySchedule(dailyScheduleWorkshop)} className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/50 text-green-400 px-4 py-2 rounded text-xs font-bold hover:bg-green-500 hover:text-white transition-all"><Download size={14} /> 導出 Excel</button>
+                          <button onClick={handleExportImage} className="flex items-center gap-1.5 bg-indigo-500/20 border border-indigo-500/50 text-indigo-400 px-4 py-2 rounded text-xs font-bold hover:bg-indigo-500 hover:text-white transition-all"><ImageIcon size={14} /> 导出图片</button>
+                          <button onClick={() => handleExportDailySchedule(dailyScheduleWorkshop)} className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/50 text-green-400 px-4 py-2 rounded text-xs font-bold hover:bg-green-500 hover:text-white transition-all"><Download size={14} /> 导出 Excel</button>
                           <button onClick={() => setDailyScheduleWorkshop(null)} className="text-cyber-muted hover:text-white ml-2 transition-colors"><X size={28} /></button>
                       </div>
                   </div>
 
                   <div className="flex-1 p-8 space-y-10">
-                       {/* 上模組：今日異常 */}
+                       {/* 上模块：今日异常 */}
                        <section>
                            <div className="flex items-center justify-between mb-4 border-b border-cyber-orange/30 pb-2">
                                <div className="flex items-center gap-2 text-cyber-orange">
                                    <AlertOctagon size={20} />
-                                   <h3 className="font-display font-bold text-base tracking-wider uppercase">今日異常回報 (TOP ISSUES)</h3>
+                                   <h3 className="font-display font-bold text-base tracking-wider uppercase">今日异常回报 (TOP ISSUES)</h3>
                                </div>
                                <span className="text-[10px] text-cyber-muted font-mono uppercase tracking-widest">Real-time Anomaly Tracking</span>
                            </div>
                            {todayAnomalies.length === 0 ? (
-                               <div className="py-8 text-center border border-dashed border-cyber-muted/20 text-cyber-muted text-sm font-mono italic bg-white/5">今日暫無顯著異常回報，生產狀況良好。</div>
+                               <div className="py-8 text-center border border-dashed border-cyber-muted/20 text-cyber-muted text-sm font-mono italic bg-white/5">今日暂无显著异常回报，生产状况良好。</div>
                            ) : (
                                <div className="overflow-hidden border border-cyber-orange/20 rounded-sm">
                                    <table className="w-full text-left border-collapse">
                                        <thead>
                                            <tr className="text-[11px] text-cyber-orange font-mono bg-cyber-orange/10 uppercase tracking-wider">
-                                               <th className="p-3 border-r border-cyber-orange/10 w-32">機台號</th>
-                                               <th className="p-3 border-r border-cyber-orange/10 w-48">工序名稱</th>
-                                               <th className="p-3 border-r border-cyber-orange/10">異常原因描述</th>
-                                               <th className="p-3 w-28 text-center">責任單位</th>
+                                               <th className="p-3 border-r border-cyber-orange/10 w-32">机台号</th>
+                                               <th className="p-3 border-r border-cyber-orange/10 w-48">工序名称</th>
+                                               <th className="p-3 border-r border-cyber-orange/10">异常原因描述</th>
+                                               <th className="p-3 w-28 text-center">责任单位</th>
                                            </tr>
                                        </thead>
                                        <tbody className="text-xs font-mono">
@@ -216,12 +216,12 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                            )}
                        </section>
 
-                       {/* 下模組：生產進度 */}
+                       {/* 下模块：生产进度 */}
                        <section>
                            <div className="flex items-center justify-between mb-4 border-b border-cyber-blue/30 pb-2">
                                <div className="flex items-center gap-2 text-cyber-blue">
                                    <Table size={20} />
-                                   <h3 className="font-display font-bold text-base tracking-wider uppercase">生產進度動態 (PRODUCTION PROGRESS)</h3>
+                                   <h3 className="font-display font-bold text-base tracking-wider uppercase">生产进度动态 (PRODUCTION PROGRESS)</h3>
                                </div>
                                <span className="text-[10px] text-cyber-muted font-mono uppercase tracking-widest">Active Line Efficiency Monitoring</span>
                            </div>
@@ -229,13 +229,13 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                                <table className="w-full text-left border-collapse table-fixed">
                                    <thead className="text-[11px] text-cyber-blue font-mono bg-cyber-blue/10 uppercase tracking-wider">
                                        <tr>
-                                           <th className="p-3 border-r border-cyber-blue/10 w-32">機台號</th>
-                                           <th className="p-3 border-r border-cyber-blue/10 w-16 text-center">進度</th>
+                                           <th className="p-3 border-r border-cyber-blue/10 w-32">机台号</th>
+                                           <th className="p-3 border-r border-cyber-blue/10 w-16 text-center">进度</th>
                                            <th className="p-3 border-r border-cyber-blue/10 w-16 text-center">偏差</th>
-                                           <th className="p-3 border-r border-cyber-blue/10 w-20 text-center">日產狀態</th>
-                                           <th className="p-3 border-r border-cyber-blue/10 w-28 text-center">預計完工</th>
-                                           <th className="p-3 border-r border-cyber-blue/10 w-28 text-center text-cyber-orange">業務結關</th>
-                                           <th className="p-3">進行中工序詳情 (MODULE DETAILS)</th>
+                                           <th className="p-3 border-r border-cyber-blue/10 w-20 text-center">日产状态</th>
+                                           <th className="p-3 border-r border-cyber-blue/10 w-28 text-center">预计完工</th>
+                                           <th className="p-3 border-r border-cyber-blue/10 w-28 text-center text-cyber-orange">业务结关</th>
+                                           <th className="p-3">进行中工序详情 (MODULE DETAILS)</th>
                                        </tr>
                                    </thead>
                                    <tbody className="text-xs font-mono">
@@ -245,7 +245,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                                                <td className="p-3 border-r border-cyber-blue/10 text-center text-cyber-blue font-bold">{o.progress}%</td>
                                                <td className={`p-3 border-r border-cyber-blue/10 text-center font-bold ${o.variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>{o.variance > 0 ? `+${o.variance}` : o.variance}</td>
                                                <td className="p-3 border-r border-cyber-blue/10 text-center">
-                                                   <span className={`px-2 py-0.5 rounded-[2px] text-[10px] font-bold border ${o.dailyStatus === 'GREEN' ? 'border-green-500/40 text-green-400 bg-green-500/10' : 'border-cyber-orange/40 text-cyber-orange bg-cyber-orange/10'}`}>{o.dailyStatus === 'GREEN' ? '正常' : '滯後'}</span>
+                                                   <span className={`px-2 py-0.5 rounded-[2px] text-[10px] font-bold border ${o.dailyStatus === 'GREEN' ? 'border-green-500/40 text-green-400 bg-green-500/10' : 'border-cyber-orange/40 text-cyber-orange bg-cyber-orange/10'}`}>{o.dailyStatus === 'GREEN' ? '正常' : '滞后'}</span>
                                                </td>
                                                <td className="p-3 border-r border-cyber-blue/10 text-center text-cyber-blue/80 font-bold">{new Date(o.projectedDate).toLocaleDateString()}</td>
                                                <td className="p-3 border-r border-cyber-blue/10 text-center text-cyber-orange font-bold">{o.closingDate ? new Date(o.closingDate).toLocaleDateString() : '-'}</td>
@@ -253,12 +253,12 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                                                    <div className="flex flex-col gap-1.5 py-0.5">
                                                        {o.details.map((d: any, i: any) => (
                                                            <div key={i} className="flex items-start gap-1.5 leading-[1.3] text-cyber-text/90">
-                                                               <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1 ${d.status === '進行中' ? 'bg-cyber-blue animate-pulse' : 'bg-cyber-muted opacity-50'}`}></span>
+                                                               <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1 ${d.status === '进行中' ? 'bg-cyber-blue animate-pulse' : 'bg-cyber-muted opacity-50'}`}></span>
                                                                <div className="break-words">
                                                                    <span className="text-cyber-blue font-bold opacity-80 mr-1">[{d.moduleName}]</span>
                                                                    <span className="text-cyan-100/90 font-medium">{d.stepModule}:</span>
                                                                    <span className="ml-1 text-white underline decoration-cyber-blue/20 underline-offset-2">{d.stepName}</span>
-                                                                   <span className={`ml-1.5 text-[10px] italic px-1 rounded border ${d.status === '進行中' ? 'border-cyber-blue/30 text-cyber-blue/80' : 'border-cyber-muted/30 text-cyber-muted/80'}`}>{d.status}</span>
+                                                                   <span className={`ml-1.5 text-[10px] italic px-1 rounded border ${d.status === '进行中' ? 'border-cyber-blue/30 text-cyber-blue/80' : 'border-cyber-muted/30 text-cyber-muted/80'}`}>{d.status}</span>
                                                                </div>
                                                            </div>
                                                        ))}
@@ -272,7 +272,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                        </section>
                   </div>
                   
-                  {/* 頁腳簽章區 */}
+                  {/* 页脚签章区 */}
                   <div className="p-8 border-t border-cyber-muted/10 bg-cyber-bg/40 flex justify-between items-end">
                       <div className="space-y-4">
                            <div className="flex gap-16 text-cyber-muted text-[10px] font-mono uppercase tracking-[0.2em]">
@@ -297,9 +297,9 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                  </div>
                  <div className="flex items-center gap-3 mb-4">
                      <Factory size={24} className="text-cyan-400" />
-                     <h3 className="text-lg font-bold text-white">生產車間動態</h3>
+                     <h3 className="text-lg font-bold text-white">生产车间动态</h3>
                  </div>
-                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各車間實時動態日報，包含今日異常清單與生產進度追蹤，支援導出高畫質看板圖片。</p>
+                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各车间实时动态日报，包含今日异常清单与生产进度追踪，支持导出高画质看板图片。</p>
                  <div className="grid grid-cols-3 gap-2 relative z-10">
                      {['K1', 'K2', 'K3'].map(ws => <button key={ws} onClick={() => setDailyScheduleWorkshop(ws)} className="bg-cyan-400/10 border border-cyan-400/50 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold rounded text-xs transition-all uppercase shadow-sm hover:shadow-cyan-400/20">{ws}</button>)}
                  </div>
@@ -309,27 +309,27 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                  <div className="absolute -right-4 -bottom-4 opacity-5 transform group-hover:scale-110 transition-transform">
                      <Table size={120} />
                  </div>
-                 <div className="flex items-center gap-3 mb-4"><Table size={24} className="text-cyber-blue" /><h3 className="text-lg font-bold text-white">生產工單總表</h3></div>
-                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">匯出當前所有在產機台的詳細數據、客戶信息及關鍵節點日期，支援標準 Excel 格式。</p>
-                 <button onClick={handleExportOrders} className="w-full bg-cyber-blue/10 border border-cyber-blue/50 text-cyber-blue hover:bg-cyber-blue hover:text-black py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-neon-blue"><Download size={16} /> 導出 Excel</button>
+                 <div className="flex items-center gap-3 mb-4"><Table size={24} className="text-cyber-blue" /><h3 className="text-lg font-bold text-white">生产工单总表</h3></div>
+                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">导出当前所有在产机台的详细数据、客户信息及关键节点日期，支持标准 Excel 格式。</p>
+                 <button onClick={handleExportOrders} className="w-full bg-cyber-blue/10 border border-cyber-blue/50 text-cyber-blue hover:bg-cyber-blue hover:text-black py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-neon-blue"><Download size={16} /> 导出 Excel</button>
             </div>
 
             <div className="bg-cyber-card border border-cyber-muted/20 p-6 group hover:border-cyber-orange/50 transition-all shadow-lg relative overflow-hidden">
                  <div className="absolute -right-4 -bottom-4 opacity-5 transform group-hover:scale-110 transition-transform">
                      <AlertOctagon size={120} />
                  </div>
-                 <div className="flex items-center gap-3 mb-4"><AlertTriangle size={24} className="text-cyber-orange" /><h3 className="text-lg font-bold text-white">異常紀錄清單</h3></div>
-                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">歷史異常數據追蹤，用於分析瓶頸工序與責任單位分佈，幫助提升工廠生產效率。</p>
-                 <button onClick={() => {}} className="w-full bg-cyber-orange/10 border border-cyber-orange/50 text-cyber-orange hover:bg-cyber-orange hover:text-black py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-neon-orange"><Download size={16} /> 導出 Excel</button>
+                 <div className="flex items-center gap-3 mb-4"><AlertTriangle size={24} className="text-cyber-orange" /><h3 className="text-lg font-bold text-white">异常纪录清单</h3></div>
+                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">历史异常数据追踪，用于分析瓶颈工序与责任单位分布，帮助提升工厂生产效率。</p>
+                 <button onClick={() => {}} className="w-full bg-cyber-orange/10 border border-cyber-orange/50 text-cyber-orange hover:bg-cyber-orange hover:text-black py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-neon-orange"><Download size={16} /> 导出 Excel</button>
             </div>
 
             <div className="bg-cyber-card border border-cyber-muted/20 p-6 group hover:border-green-500/50 transition-all shadow-lg relative overflow-hidden">
                  <div className="absolute -right-4 -bottom-4 opacity-5 transform group-hover:scale-110 transition-transform">
                      <FileClock size={120} />
                  </div>
-                 <div className="flex items-center gap-3 mb-4"><FileClock size={24} className="text-green-400" /><h3 className="text-lg font-bold text-white">生產日誌流水</h3></div>
-                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各工序實際完工記錄，包含操作人員與具體時間點，用於工時稽核與生產溯源。</p>
-                 <button onClick={() => {}} className="w-full bg-green-500/10 border border-green-500/50 text-green-400 hover:bg-green-500 hover:text-white py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-green-500/20"><Download size={16} /> 導出 Excel</button>
+                 <div className="flex items-center gap-3 mb-4"><FileClock size={24} className="text-green-400" /><h3 className="text-lg font-bold text-white">生产日志流水</h3></div>
+                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各工序实际完工记录，包含操作人员与具体时间点，用于工时稽核与生产溯源。</p>
+                 <button onClick={() => {}} className="w-full bg-green-500/10 border border-green-500/50 text-green-400 hover:bg-green-500 hover:text-white py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-green-500/20"><Download size={16} /> 导出 Excel</button>
             </div>
         </div>
     </div>

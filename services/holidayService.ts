@@ -1,4 +1,5 @@
-import { HolidayType, HolidayRule } from "../types";
+
+import { HolidayType, HolidayRule, ProcessStep } from "../types";
 
 // Helper to get ISO Week Number
 const getISOWeek = (date: Date): number => {
@@ -66,8 +67,6 @@ export const isWorkingDay = (date: Date, rule: HolidayRule): boolean => {
             // Logic for Saturday: Off on Even ISO Weeks
             if (dayOfWeek === 6) {
                 const weekNum = getISOWeek(date);
-                // If Even Week -> Holiday (return false)
-                // If Odd Week -> Workday (return true)
                 if (weekNum % 2 === 0) return false;
             }
             return true;
@@ -81,11 +80,89 @@ export const isWorkingDay = (date: Date, rule: HolidayRule): boolean => {
 };
 
 /**
- * Calculate the projected completion date
- * @param startFromDate The date to start counting from (usually "today" or "start date")
- * @param hoursNeeded Total estimated hours remaining
- * @param holidayType The holiday rule to apply
- * @param customRules Optional: Pass the full DB of rules if they are editable
+ * Standardized Order Completion Projection
+ */
+export function calculateOrderCompletionDate(
+    order: { startDate: string, stepStates: Record<string, any>, holidayType: HolidayType },
+    model: { steps: ProcessStep[], scheduleCalculationModule?: string },
+    customRules: Record<HolidayType, HolidayRule> = DEFAULT_HOLIDAY_RULES
+): Date {
+    const rule = customRules[order.holidayType] || DEFAULT_HOLIDAY_RULES['DOUBLE'];
+    const modules = Array.from(new Set(model.steps.map(s => s.parallelModule || '通用')));
+    
+    if (model.scheduleCalculationModule && modules.includes(model.scheduleCalculationModule)) {
+        const modSteps = model.steps.filter(s => (s.parallelModule || '通用') === model.scheduleCalculationModule);
+        return projectStepList(order.startDate, modSteps, order.stepStates, rule);
+    }
+
+    const completionDates = modules.map(mod => {
+        const modSteps = model.steps.filter(s => (s.parallelModule || '通用') === mod);
+        return projectStepList(order.startDate, modSteps, order.stepStates, rule);
+    });
+
+    return new Date(Math.max(...completionDates.map(d => d.getTime())));
+}
+
+/**
+ * Projects a sequence of steps starting from startDateStr.
+ */
+function projectStepList(startDateStr: string, steps: ProcessStep[], states: Record<string, any>, rule: HolidayRule): Date {
+    let cursor = new Date(startDateStr);
+    cursor.setHours(0,0,0,0);
+    
+    // 取得當前時間與 21:00 順延邏輯
+    const now = new Date();
+    const todayAtMidnight = new Date(now);
+    todayAtMidnight.setHours(0,0,0,0);
+    
+    // 如果現在超過 21:00，有效「今日」視為「明日」
+    const effectiveEarliestStart = new Date(todayAtMidnight);
+    if (now.getHours() >= 21) {
+        effectiveEarliestStart.setDate(effectiveEarliestStart.getDate() + 1);
+    }
+
+    let lastUsedDate = new Date(cursor);
+
+    steps.forEach(step => {
+        const state = states[step.id] || { status: 'PENDING' };
+        
+        if (state.status === 'COMPLETED' || state.status === 'SKIPPED') {
+            const endTime = new Date(state.endTime || state.startTime || startDateStr);
+            const dateOnly = new Date(endTime); 
+            dateOnly.setHours(0,0,0,0);
+            
+            if (dateOnly > lastUsedDate) lastUsedDate = new Date(dateOnly);
+            if (dateOnly >= cursor) {
+                cursor = new Date(dateOnly);
+                cursor.setDate(cursor.getDate() + 1);
+            }
+        } else {
+            // 對於未開工(PENDING)或進行中(IN_PROGRESS)的任务：
+            // 起點游標不得早於有效起點 (解決 12/16 任務卡在過去的問題)
+            if (cursor < effectiveEarliestStart) {
+                cursor = new Date(effectiveEarliestStart);
+            }
+
+            let hoursRemaining = step.estimatedHours;
+            while (hoursRemaining > 0) {
+                let safety = 0;
+                while (!isWorkingDay(cursor, rule) && safety < 60) {
+                    cursor.setDate(cursor.getDate() + 1);
+                    safety++;
+                }
+                
+                lastUsedDate = new Date(cursor);
+                hoursRemaining -= 8; // 假設每日 8 小時
+                cursor.setDate(cursor.getDate() + 1);
+            }
+        }
+    });
+
+    return lastUsedDate;
+}
+
+/**
+ * Simplified Projection (Legacy / Backwards Compatibility)
  */
 export const calculateProjectedDate = (
     startFromDate: Date, 
@@ -94,31 +171,24 @@ export const calculateProjectedDate = (
     customRules: Record<HolidayType, HolidayRule> = DEFAULT_HOLIDAY_RULES
 ): Date => {
     if (hoursNeeded <= 0) return new Date(startFromDate);
-
-    // 將剩餘工時轉換為所需天數，以每日 8 小時為計算基准
-    let daysRemaining = Math.ceil(hoursNeeded / 8);
-    let currentDate = new Date(startFromDate);
-    const rule = customRules[holidayType];
-
-    // 安全計數器，防止無限循環
-    let iterations = 0;
-    const MAX_ITERATIONS = 730; 
-
-    // 優化後的邏輯：如果起始日期（通常是今天）是工作日，則應該從今天開始抵扣工時。
-    // 這確保了如果剩餘 8 小時工作，且今天是工作日，完工日將顯示為「今天」。
-    if (isWorkingDay(currentDate, rule)) {
-        daysRemaining--;
+    
+    // 同樣套用 21:00 順延邏輯
+    const now = new Date();
+    let effectiveStart = new Date(startFromDate);
+    if (now.getHours() >= 21 && startFromDate.toDateString() === now.toDateString()) {
+        effectiveStart.setDate(effectiveStart.getDate() + 1);
     }
 
-    // 如果還有剩餘天數需要完成，則繼續往後尋找工作日
-    while (daysRemaining > 0 && iterations < MAX_ITERATIONS) {
+    let daysRemaining = Math.ceil(hoursNeeded / 8);
+    let currentDate = new Date(effectiveStart);
+    const rule = customRules[holidayType] || DEFAULT_HOLIDAY_RULES['DOUBLE'];
+    let iterations = 0;
+    
+    if (isWorkingDay(currentDate, rule)) daysRemaining--;
+    while (daysRemaining > 0 && iterations < 730) {
         currentDate.setDate(currentDate.getDate() + 1);
-        
-        if (isWorkingDay(currentDate, rule)) {
-            daysRemaining--;
-        }
+        if (isWorkingDay(currentDate, rule)) daysRemaining--;
         iterations++;
     }
-
     return currentDate;
 };

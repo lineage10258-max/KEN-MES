@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from "./supabaseClient"; 
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Workstation } from './components/Workstation';
@@ -15,21 +14,18 @@ import { LoginScreen } from './components/LoginScreen';
 import { orderApi } from './services/orderApi';
 import { modelApi } from './services/modelApi';
 import { holidayApi } from './services/holidayApi';
-import { userService } from './services/userService';
-import { DEFAULT_HOLIDAY_RULES, calculateProjectedDate } from './services/holidayService';
-import { View, WorkOrder, MachineStatus, MachineModel, StepStatusEnum, HolidayRule, HolidayType, StepState, AppUser, UserRole, AnomalyRecord, ProcessStep } from './types';
+import { DEFAULT_HOLIDAY_RULES, calculateOrderCompletionDate } from './services/holidayService';
+import { View, WorkOrder, MachineStatus, MachineModel, StepStatusEnum, HolidayRule, HolidayType, StepState, AppUser, AnomalyRecord } from './types';
 import { Loader2 } from 'lucide-react';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [currentView, setCurrentView] = useState<View>('DASHBOARD');
   
-  // App Data State
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [models, setModels] = useState<MachineModel[]>([]);
   const [holidayRules, setHolidayRules] = useState<Record<HolidayType, HolidayRule>>(DEFAULT_HOLIDAY_RULES);
 
-  // Sync/UI State
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
   const [lastSync, setLastSync] = useState<Date>(new Date());
@@ -40,14 +36,12 @@ function App() {
   useEffect(() => {
     const storedUser = localStorage.getItem('ken_mes_current_user');
     if (storedUser) {
-      const user = JSON.parse(storedUser);
-      setCurrentUser(user);
+      setCurrentUser(JSON.parse(storedUser));
     }
   }, []);
 
   useEffect(() => {
     if (!currentUser) return;
-
     const initData = async () => {
       setIsLoading(true);
       setDbStatus('CONNECTING');
@@ -57,11 +51,9 @@ function App() {
             modelApi.fetchAll(),
             holidayApi.fetchAll()
         ]);
-
         setOrders(fetchedOrders);
         setModels(fetchedModels);
         setHolidayRules(prev => ({ ...prev, ...fetchedHolidays }));
-
         setLastSync(new Date());
         setDbStatus('CONNECTED');
         setIsDataLoaded(true);
@@ -73,10 +65,7 @@ function App() {
         setIsLoading(false);
       }
     };
-
-    if (!isDataLoaded) {
-        initData();
-    }
+    if (!isDataLoaded) initData();
   }, [currentUser, isDataLoaded]);
 
   const handleLogin = (user: AppUser) => {
@@ -94,81 +83,33 @@ function App() {
   const updateStepStatus = async (orderId: string, stepId: string, status: StepStatusEnum) => {
       const targetOrder = orders.find(o => o.id === orderId);
       if (!targetOrder) return;
-
       const model = models.find(m => m.id === targetOrder.modelId);
-      const stepInfo = model?.steps.find(s => s.id === stepId);
-
       const newStepStates = { ...targetOrder.stepStates };
       newStepStates[stepId] = {
-          status: status,
+          status,
           startTime: status === 'IN_PROGRESS' ? new Date().toISOString() : newStepStates[stepId]?.startTime,
           endTime: (status === 'COMPLETED' || status === 'SKIPPED') ? new Date().toISOString() : undefined,
-          operator: currentUser ? `${currentUser.name}` : 'Unknown'
+          operator: currentUser?.name || 'Unknown'
       };
 
-      const newLogs = [...(targetOrder.logs || [])];
-      if (status === 'COMPLETED') {
-           newLogs.push({
-               stepId,
-               completedAt: new Date().toISOString(),
-               completedBy: currentUser ? currentUser.name : 'Unknown',
-               notes: `工序完成: ${stepInfo?.name || stepId}`
-           });
-      } else if (status === 'SKIPPED') {
-           newLogs.push({
-               stepId,
-               completedAt: new Date().toISOString(),
-               completedBy: currentUser ? currentUser.name : 'Unknown',
-               notes: `工序忽略: ${stepInfo?.name || stepId}`
-           });
-      }
-
-      const completedSteps = Object.values(newStepStates).filter((s: StepState) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
-      
       let newEstimatedDate = targetOrder.estimatedCompletionDate;
       if (model) {
-          const getRemainingHoursForStep = (s: ProcessStep) => {
-             const currentStatus = newStepStates[s.id]?.status;
-             const isDone = currentStatus === 'COMPLETED' || currentStatus === 'SKIPPED';
-             return isDone ? 0 : s.estimatedHours;
-          };
-
-          let remainingHours = 0;
-          if (model.scheduleCalculationModule) {
-              const moduleSteps = model.steps.filter(s => s.parallelModule === model.scheduleCalculationModule);
-              remainingHours = moduleSteps.reduce((acc, s) => acc + getRemainingHoursForStep(s), 0);
-          } else {
-              const moduleRemaining: Record<string, number> = {};
-              model.steps.forEach(s => {
-                  const key = s.parallelModule || '通用';
-                  const h = getRemainingHoursForStep(s);
-                  moduleRemaining[key] = (moduleRemaining[key] || 0) + h;
-              });
-              remainingHours = Math.max(0, ...Object.values(moduleRemaining));
-          }
-          const now = new Date();
-          newEstimatedDate = calculateProjectedDate(now, remainingHours, targetOrder.holidayType).toISOString();
+          const projectedDate = calculateOrderCompletionDate({ ...targetOrder, stepStates: newStepStates }, model, holidayRules);
+          newEstimatedDate = projectedDate.toISOString();
       }
 
       const updatedOrder: WorkOrder = {
           ...targetOrder,
           stepStates: newStepStates,
-          logs: newLogs,
-          currentStepIndex: completedSteps,
+          currentStepIndex: Object.values(newStepStates).filter((s: StepState) => s.status === 'COMPLETED' || s.status === 'SKIPPED').length,
           estimatedCompletionDate: newEstimatedDate
       };
 
       setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-      
       try { 
         await orderApi.update(updatedOrder); 
-        setLastSync(new Date()); 
         setLastSaveTime(new Date()); 
-      } catch (e: any) { 
-        console.error("Update failed", e);
-        setOrders(prev => prev.map(o => o.id === orderId ? targetOrder : o));
-        alert(`更新失败: ${e.message || '未知错误'}`);
-      }
+      } catch (e: any) { alert(`更新失敗: ${e.message}`); }
   };
 
   const updateStatus = async (orderId: string, status: MachineStatus) => {
@@ -176,16 +117,15 @@ function App() {
     if (!targetOrder) return;
     const updatedOrder = { ...targetOrder, status };
     setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-    try { await orderApi.update(updatedOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`状态更新失败: ${e.message}`); }
+    try { await orderApi.update(updatedOrder); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   }
 
   const handleAddAnomaly = async (orderId: string, anomaly: AnomalyRecord) => {
       const targetOrder = orders.find(o => o.id === orderId);
       if (!targetOrder) return;
       const newAnomalies = [...(targetOrder.anomalies || []), anomaly];
-      const updatedOrder = { ...targetOrder, anomalies: newAnomalies };
-      setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
-      try { await orderApi.createAnomaly(orderId, anomaly); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`保存异常失败: ${e.message}`); }
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...targetOrder, anomalies: newAnomalies } : o));
+      try { await orderApi.createAnomaly(orderId, anomaly); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const handleUpdateAnomaly = async (updatedAnomaly: AnomalyRecord, orderId: string) => {
@@ -195,59 +135,57 @@ function App() {
           }
           return order;
       }));
-      try { await orderApi.updateAnomaly(updatedAnomaly); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`更新异常失败: ${e.message}`); }
+      try { await orderApi.updateAnomaly(updatedAnomaly); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const handleDeleteAnomaly = async (anomalyId: string, orderId: string) => {
-      if(!confirm("确定要删除这条异常记录吗？")) return;
+      if(!confirm("確定要刪除這條異常記錄嗎？")) return;
       setOrders(prev => prev.map(order => {
           if (order.id === orderId && order.anomalies) {
               return { ...order, anomalies: order.anomalies.filter(a => a.id !== anomalyId) };
           }
           return order;
       }));
-      try { await orderApi.deleteAnomaly(anomalyId); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`删除异常失败: ${e.message}`); }
+      try { await orderApi.deleteAnomaly(anomalyId); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const handleAddOrder = async (newOrder: WorkOrder) => {
     setOrders(prev => [newOrder, ...prev]); 
-    try { await orderApi.create(newOrder); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`创建失败: ${e.message}`); }
+    try { await orderApi.create(newOrder); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const handleUpdateOrder = async (updatedOrder: WorkOrder, originalId?: string) => {
-    const targetId = originalId || updatedOrder.id;
-    setOrders(prev => prev.map(o => o.id === targetId ? updatedOrder : o));
-    try { await orderApi.update(updatedOrder, originalId); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`更新失败: ${e.message}`); }
+    setOrders(prev => prev.map(o => o.id === (originalId || updatedOrder.id) ? updatedOrder : o));
+    try { await orderApi.update(updatedOrder, originalId); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const handleDeleteOrder = async (id: string) => {
-    if (confirm(`确定要删除机台 ${id} 吗？`)) {
+    if (confirm(`確定要刪除機台 ${id} 嗎？`)) {
       setOrders(prev => prev.filter(o => o.id !== id));
-      try { await orderApi.delete(id); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`删除失败: ${e.message}`); }
+      try { await orderApi.delete(id); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
     }
   };
 
   const handleAddModel = async (newModel: MachineModel) => {
     setModels(prev => [...prev, newModel]);
-    try { await modelApi.create(newModel); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`创建工艺失败: ${e.message}`); throw e; }
+    try { await modelApi.create(newModel); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const handleUpdateModel = async (updatedModel: MachineModel) => {
     setModels(prev => prev.map(m => m.id === updatedModel.id ? updatedModel : m));
-    try { await modelApi.update(updatedModel); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`更新工艺失败: ${e.message}`); throw e; }
+    try { await modelApi.update(updatedModel); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const handleDeleteModel = async (id: string) => {
-    if(confirm('确定删除此工艺模型吗？')) {
-        const prevModels = [...models];
+    if(confirm('確定刪除此工藝模型嗎？')) {
         setModels(prev => prev.filter(m => m.id !== id));
-        try { await modelApi.delete(id); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { setModels(prevModels); alert(`删除失败: ${e.message}`); }
+        try { await modelApi.delete(id); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
     }
   };
 
   const handleUpdateHolidayRule = async (updatedRule: HolidayRule) => {
       setHolidayRules(prev => ({ ...prev, [updatedRule.type]: updatedRule }));
-      try { await holidayApi.update(updatedRule); setLastSync(new Date()); setLastSaveTime(new Date()); } catch (e: any) { alert(`假日更新失败: ${e.message}`); }
+      try { await holidayApi.update(updatedRule); setLastSaveTime(new Date()); } catch (e) { console.error(e); }
   };
 
   const canAccess = (view: View) => currentUser?.allowedViews?.includes(view);
@@ -262,14 +200,13 @@ function App() {
         </div>
       );
     }
-
     if (!canAccess(currentView)) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-center">
                  <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/30">
                      <span className="text-2xl">🚫</span>
                  </div>
-                 <h2 className="text-xl font-bold text-white mb-2">存取被拒絕</h2>
+                 <h2 className="text-xl font-bold text-white mb-2">訪問被拒絕</h2>
                  <p className="text-cyber-muted">您沒有權限訪問此頁面。</p>
                  <button onClick={() => setCurrentView('DASHBOARD')} className="mt-6 text-cyber-blue hover:text-white underline text-sm">返回首頁</button>
             </div>
@@ -278,18 +215,7 @@ function App() {
 
     switch (currentView) {
       case 'DASHBOARD': return <Dashboard orders={orders} models={models} />;
-      case 'WORK_SCHEDULE': 
-        return (
-          <Workstation 
-            orders={orders} 
-            models={models} 
-            holidayRules={holidayRules} 
-            onUpdateStepStatus={() => {}} 
-            onStatusChange={() => {}} 
-            onAddAnomaly={() => {}} 
-            isReadOnly={true} 
-          />
-        );
+      case 'WORK_SCHEDULE': return <Workstation orders={orders} models={models} holidayRules={holidayRules} onUpdateStepStatus={() => {}} onStatusChange={() => {}} onAddAnomaly={() => {}} isReadOnly={true} />;
       case 'WORKSTATION': return <Workstation orders={orders} models={models} holidayRules={holidayRules} onUpdateStepStatus={updateStepStatus} onStatusChange={updateStatus} onAddAnomaly={handleAddAnomaly} />;
       case 'ANOMALY_LIST': return <AnomalyList orders={orders} models={models} onUpdateAnomaly={handleUpdateAnomaly} onDeleteAnomaly={handleDeleteAnomaly} />;
       case 'REPORT_DOWNLOAD': return <ReportDownload orders={orders} models={models} />;
@@ -302,15 +228,30 @@ function App() {
   };
 
   return (
-    <div className="w-screen h-screen bg-cyber-bg overflow-hidden relative">
-        {!currentUser ? (
-            <LoginScreen onLoginSuccess={handleLogin} />
-        ) : (
-            <Layout currentView={currentView} onNavigate={setCurrentView} lastSync={lastSync} lastSaveTime={lastSaveTime} dbStatus={dbStatus} currentUser={currentUser} onLogout={handleLogout}>
-                {dbStatus === 'ERROR' && errorMessage && <div className="bg-red-500/10 border-b border-red-500/50 p-2 text-center text-red-500 text-xs font-mono">DB Error: {errorMessage}</div>}
-                {renderContent()}
-            </Layout>
-        )}
+    <div className="h-screen w-screen bg-cyber-bg overflow-hidden flex flex-col font-sans">
+      {!currentUser ? (
+        <LoginScreen onLoginSuccess={handleLogin} />
+      ) : (
+        <Layout 
+          currentView={currentView} 
+          onNavigate={setCurrentView} 
+          lastSync={lastSync} 
+          lastSaveTime={lastSaveTime} 
+          dbStatus={dbStatus} 
+          currentUser={currentUser!} 
+          onLogout={handleLogout}
+        >
+          {dbStatus === 'ERROR' && errorMessage && (
+            <div className="bg-red-500/10 border-b border-red-500/50 p-2 text-center text-red-500 text-xs font-mono">
+              DB Error: {errorMessage}
+            </div>
+          )}
+          {/* Main render container - ensures scrolling happens here */}
+          <div className="flex-1 min-h-0">
+            {renderContent()}
+          </div>
+        </Layout>
+      )}
     </div>
   );
 }
