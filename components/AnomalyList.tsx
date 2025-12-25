@@ -50,7 +50,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
         item.reason.toLowerCase().includes(term);
 
       // Workshop
-      const matchWorkshop = selectedWorkshop === 'ALL' || item.workshop.startsWith(selectedWorkshop);
+      const matchWorkshop = selectedWorkshop === 'ALL' || item.workshop === selectedWorkshop;
 
       // Department
       const matchDept = selectedDepartment === 'ALL' || item.department === selectedDepartment;
@@ -305,7 +305,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
             <div>
                 <h2 className="text-2xl font-display font-bold text-white">全厂异常监控中心</h2>
                 <p className="text-cyber-muted font-mono text-sm mt-1">
-                    汇整所有生产机台的异常回报纪录，追踪责任单位与处理时效。
+                    汇整所有生产机台的异常回报纪录，追踪责任单位 with 处理时效。
                 </p>
             </div>
             <div className="ml-auto flex gap-4">
@@ -345,9 +345,9 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                     className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"
                 >
                     <option value="ALL">全部车间</option>
-                    <option value="K1">K1(18栋)</option>
-                    <option value="K2">K2(17栋)</option>
-                    <option value="K3">K3(戚墅堰)</option>
+                    <option value="K1廠">K1廠</option>
+                    <option value="K2廠">K2廠</option>
+                    <option value="K3廠">K3廠</option>
                 </select>
             </div>
 

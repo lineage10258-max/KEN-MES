@@ -1,5 +1,5 @@
 
-import { HolidayType, HolidayRule, ProcessStep } from "../types";
+import { HolidayType, HolidayRule, ProcessStep, AnomalyRecord } from "../types";
 
 // Helper to get ISO Week Number
 const getISOWeek = (date: Date): number => {
@@ -80,24 +80,45 @@ export const isWorkingDay = (date: Date, rule: HolidayRule): boolean => {
 };
 
 /**
+ * Check if a date is within a HALTED anomaly period
+ */
+const isHaltedDay = (date: Date, anomalies: AnomalyRecord[]): boolean => {
+    if (!anomalies || anomalies.length === 0) return false;
+    const targetTime = date.getTime();
+    
+    return anomalies.some(a => {
+        if (a.anomalyStatus !== 'HALTED') return false;
+        const start = new Date(a.startTime);
+        start.setHours(0,0,0,0);
+        
+        // If no end time, assume it's still halted up to "today"
+        const end = a.endTime ? new Date(a.endTime) : new Date();
+        end.setHours(23,59,59,999);
+        
+        return targetTime >= start.getTime() && targetTime <= end.getTime();
+    });
+};
+
+/**
  * Standardized Order Completion Projection
  */
 export function calculateOrderCompletionDate(
-    order: { startDate: string, stepStates: Record<string, any>, holidayType: HolidayType },
+    order: { startDate: string, stepStates: Record<string, any>, holidayType: HolidayType, anomalies?: AnomalyRecord[] },
     model: { steps: ProcessStep[], scheduleCalculationModule?: string },
     customRules: Record<HolidayType, HolidayRule> = DEFAULT_HOLIDAY_RULES
 ): Date {
     const rule = customRules[order.holidayType] || DEFAULT_HOLIDAY_RULES['DOUBLE'];
     const modules = Array.from(new Set(model.steps.map(s => s.parallelModule || '通用')));
+    const anomalies = order.anomalies || [];
     
     if (model.scheduleCalculationModule && modules.includes(model.scheduleCalculationModule)) {
         const modSteps = model.steps.filter(s => (s.parallelModule || '通用') === model.scheduleCalculationModule);
-        return projectStepList(order.startDate, modSteps, order.stepStates, rule);
+        return projectStepList(order.startDate, modSteps, order.stepStates, rule, anomalies);
     }
 
     const completionDates = modules.map(mod => {
         const modSteps = model.steps.filter(s => (s.parallelModule || '通用') === mod);
-        return projectStepList(order.startDate, modSteps, order.stepStates, rule);
+        return projectStepList(order.startDate, modSteps, order.stepStates, rule, anomalies);
     });
 
     return new Date(Math.max(...completionDates.map(d => d.getTime())));
@@ -106,7 +127,7 @@ export function calculateOrderCompletionDate(
 /**
  * Projects a sequence of steps starting from startDateStr.
  */
-function projectStepList(startDateStr: string, steps: ProcessStep[], states: Record<string, any>, rule: HolidayRule): Date {
+function projectStepList(startDateStr: string, steps: ProcessStep[], states: Record<string, any>, rule: HolidayRule, anomalies: AnomalyRecord[]): Date {
     let cursor = new Date(startDateStr);
     cursor.setHours(0,0,0,0);
     
@@ -138,7 +159,7 @@ function projectStepList(startDateStr: string, steps: ProcessStep[], states: Rec
             }
         } else {
             // 對於未開工(PENDING)或進行中(IN_PROGRESS)的任务：
-            // 起點游標不得早於有效起點 (解決 12/16 任務卡在過去的問題)
+            // 起點游標不得早於有效起點
             if (cursor < effectiveEarliestStart) {
                 cursor = new Date(effectiveEarliestStart);
             }
@@ -146,7 +167,8 @@ function projectStepList(startDateStr: string, steps: ProcessStep[], states: Rec
             let hoursRemaining = step.estimatedHours;
             while (hoursRemaining > 0) {
                 let safety = 0;
-                while (!isWorkingDay(cursor, rule) && safety < 60) {
+                // 檢查是否為工作日 且 不是停工日
+                while ((!isWorkingDay(cursor, rule) || isHaltedDay(cursor, anomalies)) && safety < 100) {
                     cursor.setDate(cursor.getDate() + 1);
                     safety++;
                 }
@@ -172,7 +194,6 @@ export const calculateProjectedDate = (
 ): Date => {
     if (hoursNeeded <= 0) return new Date(startFromDate);
     
-    // 同樣套用 21:00 順延邏輯
     const now = new Date();
     let effectiveStart = new Date(startFromDate);
     if (now.getHours() >= 21 && startFromDate.toDateString() === now.toDateString()) {

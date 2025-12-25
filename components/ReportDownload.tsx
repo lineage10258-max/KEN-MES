@@ -64,7 +64,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       if (!dailyScheduleWorkshop) return [];
       const today = new Date().toISOString().split('T')[0];
       return orders
-          .filter(o => o.workshop?.startsWith(dailyScheduleWorkshop))
+          .filter(o => o.workshop === dailyScheduleWorkshop)
           .flatMap(o => (o.anomalies || []).map(a => ({ ...a, orderId: o.id })))
           .filter(a => a.startTime.startsWith(today) || !a.endTime); 
   }, [dailyScheduleWorkshop, orders]);
@@ -74,7 +74,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       if (!dailyScheduleWorkshop) return [];
       const todayStr = new Date().toDateString();
       return orders
-          .filter(o => o.status === MachineStatus.IN_PROGRESS && o.workshop?.startsWith(dailyScheduleWorkshop))
+          .filter(o => o.status === MachineStatus.IN_PROGRESS && o.workshop === dailyScheduleWorkshop)
           .sort((a, b) => {
               const dateA = a.businessClosingDate ? new Date(a.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
               const dateB = b.businessClosingDate ? new Date(b.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -124,7 +124,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "生产工单");
-    XLSX.writeFile(wb, `生产工单_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `生产工單_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleExportDailySchedule = (workshop: string) => {
@@ -141,7 +141,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
       const wb = XLSX.utils.book_new();
       if (anomalyData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(anomalyData), "今日异常");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(progressData), "生产进度");
-      XLSX.writeFile(wb, `${workshop}车间日报_${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `${workshop}日报_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleExportImage = async () => {
@@ -167,7 +167,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                       <div className="flex items-center gap-4">
                            <Factory size={32} className="text-cyber-orange" />
                            <div>
-                               <h2 className="text-2xl font-display font-bold text-white uppercase tracking-widest">{dailyScheduleWorkshop} 车间日排程动态</h2>
+                               <h2 className="text-2xl font-display font-bold text-white uppercase tracking-widest">{dailyScheduleWorkshop} 日排程动态</h2>
                                <p className="text-xs text-cyber-blue font-mono mt-0.5">{getHeaderDate()}</p>
                            </div>
                       </div>
@@ -299,9 +299,9 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                      <Factory size={24} className="text-cyan-400" />
                      <h3 className="text-lg font-bold text-white">生产车间动态</h3>
                  </div>
-                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各车间实时动态日报，包含今日异常清单与生产进度追踪，支持导出高画质看板图片。</p>
+                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各车间实时动态日报，包含今日异常清单與生产进度追踪，支持导出高画质看板图片。</p>
                  <div className="grid grid-cols-3 gap-2 relative z-10">
-                     {['K1', 'K2', 'K3'].map(ws => <button key={ws} onClick={() => setDailyScheduleWorkshop(ws)} className="bg-cyan-400/10 border border-cyan-400/50 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold rounded text-xs transition-all uppercase shadow-sm hover:shadow-cyan-400/20">{ws}</button>)}
+                     {['K1廠', 'K2廠', 'K3廠'].map(ws => <button key={ws} onClick={() => setDailyScheduleWorkshop(ws)} className="bg-cyan-400/10 border border-cyan-400/50 text-cyan-400 hover:bg-cyan-400 hover:text-black py-2 font-bold rounded text-xs transition-all uppercase shadow-sm hover:shadow-cyan-400/20">{ws}</button>)}
                  </div>
             </div>
 
@@ -319,7 +319,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                      <AlertOctagon size={120} />
                  </div>
                  <div className="flex items-center gap-3 mb-4"><AlertTriangle size={24} className="text-cyber-orange" /><h3 className="text-lg font-bold text-white">异常纪录清单</h3></div>
-                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">历史异常数据追踪，用于分析瓶颈工序与责任单位分布，帮助提升工厂生产效率。</p>
+                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">历史异常数据追踪，用于分析瓶颈工序與责任单位分布，帮助提升工厂生产效率。</p>
                  <button onClick={() => {}} className="w-full bg-cyber-orange/10 border border-cyber-orange/50 text-cyber-orange hover:bg-cyber-orange hover:text-black py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-neon-orange"><Download size={16} /> 导出 Excel</button>
             </div>
 
@@ -328,7 +328,7 @@ export const ReportDownload: React.FC<ReportDownloadProps> = ({ orders, models }
                      <FileClock size={120} />
                  </div>
                  <div className="flex items-center gap-3 mb-4"><FileClock size={24} className="text-green-400" /><h3 className="text-lg font-bold text-white">生产日志流水</h3></div>
-                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各工序实际完工记录，包含操作人员与具体时间点，用于工时稽核与生产溯源。</p>
+                 <p className="text-xs text-cyber-muted mb-6 h-12 leading-relaxed">各工序实际完工记录，包含操作人员與具体时间点，用于工时稽核與生产溯源。</p>
                  <button onClick={() => {}} className="w-full bg-green-500/10 border border-green-500/50 text-green-400 hover:bg-green-500 hover:text-white py-2.5 font-bold uppercase transition-all flex items-center justify-center gap-2 rounded text-xs shadow-sm hover:shadow-green-500/20"><Download size={16} /> 导出 Excel</button>
             </div>
         </div>

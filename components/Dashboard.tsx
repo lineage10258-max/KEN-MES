@@ -23,8 +23,8 @@ const getDynamicProjectedDate = (order: WorkOrder, models: MachineModel[]) => {
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
-  const [workshopTab, setWorkshopTab] = useState<'ALL' | 'K1' | 'K2' | 'K3'>('ALL');
-  const [realtimeTab, setRealtimeTab] = useState<'ALL' | 'K1' | 'K2' | 'K3'>('ALL');
+  const [workshopTab, setWorkshopTab] = useState<'ALL' | 'K1廠' | 'K2廠' | 'K3廠'>('ALL');
+  const [realtimeTab, setRealtimeTab] = useState<'ALL' | 'K1廠' | 'K2廠' | 'K3廠'>('ALL');
   const [scheduleMode, setScheduleMode] = useState<'START' | 'COMPLETE'>('START');
   
   const [aiInsight, setAiInsight] = useState<string>('');
@@ -132,16 +132,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
 
   const displayedSchedule = activeScheduleList.filter(order => {
       if (workshopTab === 'ALL') return true;
-      return order.workshop?.startsWith(workshopTab) ?? false;
+      return order.workshop === workshopTab;
   });
 
   const getWorkshopCount = (tab: string) => {
       if (tab === 'ALL') return activeScheduleList.length;
-      return activeScheduleList.filter(o => o.workshop?.startsWith(tab)).length;
+      return activeScheduleList.filter(o => o.workshop === tab).length;
   };
 
   const filteredRealtimeOrders = orders
-      .filter(o => (realtimeTab === 'ALL' || (o.workshop?.startsWith(realtimeTab) ?? false)) && (o.status === MachineStatus.IN_PROGRESS || o.status === MachineStatus.HALTED))
+      .filter(o => (realtimeTab === 'ALL' || o.workshop === realtimeTab) && (o.status === MachineStatus.IN_PROGRESS || o.status === MachineStatus.HALTED))
       .sort((a, b) => {
           const dateA = a.businessClosingDate ? new Date(a.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
           const dateB = b.businessClosingDate ? new Date(b.businessClosingDate).getTime() : Number.MAX_SAFE_INTEGER;
@@ -171,7 +171,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
                 <div className="flex items-center gap-6">
                     <h2 className="text-lg font-display font-bold text-cyber-blue tracking-wider">实时生产动态</h2>
                     <div className="flex bg-cyber-bg/30 rounded p-1 border border-cyber-blue/20">
-                        {['ALL', 'K1', 'K2', 'K3'].map((tab) => (
+                        {['ALL', 'K1廠', 'K2廠', 'K3廠'].map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setRealtimeTab(tab as any)}
@@ -191,7 +191,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
                     <div className="w-12 h-12 rounded-full bg-cyber-muted/10 flex items-center justify-center mb-3">
                         <Factory className="opacity-50" />
                     </div>
-                    <p>{realtimeTab === 'ALL' ? '当前无正在进行中的生产任务' : `${realtimeTab} 车间当前无正在进行中的生产任务`}</p>
+                    <p>{realtimeTab === 'ALL' ? '当前无正在进行中的生产任务' : `${realtimeTab} 当前无正在进行中的生产任务`}</p>
                 </div>
             ) : (
                 filteredRealtimeOrders.map(order => <OrderCard key={order.id} order={order} models={models} formatMMDD={formatMMDD} />)
@@ -266,7 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
              </div>
 
              <div className="flex border-b border-cyber-blue/20 bg-cyber-bg/30">
-                {['ALL', 'K1', 'K2', 'K3'].map((tab) => (
+                {['ALL', 'K1廠', 'K2廠', 'K3廠'].map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setWorkshopTab(tab as any)}
@@ -368,7 +368,6 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false, f
         return (Object.values(order.stepStates || {}) as StepState[]).filter(s => s.status === 'COMPLETED' || s.status === 'SKIPPED').length;
     }, [order.stepStates]);
 
-    // 修復 NaN 問題：若 totalSteps 為 0，進度設為 0
     const progress = totalSteps > 0 ? Math.round((doneCount / totalSteps) * 100) : 0;
     
     const currentStepName = useMemo(() => {
@@ -477,7 +476,6 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false, f
                         <span className={`font-medium truncate ${!model ? 'text-red-500' : 'text-white'}`}>{currentStepName}</span>
                      </div>
                 </div>
-                {/* 進度條軌道：增加對比度，確保 0% 也能看到一條線 */}
                 <div className="overflow-hidden h-1 text-[10px] flex bg-cyber-bg border border-cyber-blue/20">
                     <div 
                         style={{ width: `${progress}%` }} 

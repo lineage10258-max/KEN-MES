@@ -13,11 +13,10 @@ interface OrderDatabaseProps {
   onDeleteOrder: (id: string) => void;
 }
 
-// Fixed: Added missing options constants for filters
 const WORKSHOP_OPTIONS = [
-    { value: 'K1(18栋)', label: 'K1(18栋)' },
-    { value: 'K2(17栋)', label: 'K2(17栋)' },
-    { value: 'K3(戚墅堰)', label: 'K3(戚墅堰)' },
+    { value: 'K1廠', label: 'K1廠' },
+    { value: 'K2廠', label: 'K2廠' },
+    { value: 'K3廠', label: 'K3廠' },
 ];
 
 const STATUS_OPTIONS = [
@@ -74,7 +73,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState('');
   const [machineId, setMachineId] = useState('');
-  const [workshop, setWorkshop] = useState('K1(18栋)');
+  const [workshop, setWorkshop] = useState('K1廠');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [businessDate, setBusinessDate] = useState('');
@@ -91,7 +90,6 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
   const [existingStepStates, setExistingStepStates] = useState<Record<string, any>>({});
   const [existingEstimatedDate, setExistingEstimatedDate] = useState<string>('');
 
-  // Fixed: Added triggerFileUpload and getModelName definitions
   const triggerFileUpload = () => fileInputRef.current?.click();
   const getModelName = (id: string) => models.find(m => m.id === id)?.name || id;
 
@@ -122,7 +120,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
   }, [startDate, selectedModelId, holidayType, models, existingStepStates]);
 
   const resetForm = () => {
-    setEditingOrderId(null); setMachineId(''); setSelectedModelId(''); setWorkshop('K1(18栋)'); setStartDate(''); setEndDate(''); setBusinessDate(''); setHolidayType('DOUBLE');
+    setEditingOrderId(null); setMachineId(''); setSelectedModelId(''); setWorkshop('K1廠'); setStartDate(''); setEndDate(''); setBusinessDate(''); setHolidayType('DOUBLE');
     setClientName(''); setAxisHead(''); setToolHolderSpec(''); setMagazineCount(''); setZAxisTravel(''); setSpindleSpeed('');
     setExistingStatus(MachineStatus.PLANNED); setExistingStepIndex(0); setExistingLogs([]); setExistingStepStates({}); setExistingEstimatedDate('');
   };
@@ -163,7 +161,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
   };
 
   const handleDownloadTemplate = () => {
-    const wsData = [{ "机台号": "SN-2024-TEST01", "机型名称": "LINMAXB-TEST", "生产车间": "K1(18栋)", "计划上线日期": "2024-05-01", "假日别": "DOUBLE", "客户名称": "测试客户A", "二轴头": "K4", "刀柄规格": "A100", "刀库数": "60T", "Z轴行程": "1000mm", "主轴转速": "12000rpm", "业务结关日期": "2024-06-01" }];
+    const wsData = [{ "机台号": "SN-2024-TEST01", "机型名称": "LINMAXB-TEST", "生产车间": "K1廠", "计划上线日期": "2024-05-01", "假日别": "DOUBLE", "客户名称": "测试客户A", "二轴头": "K4", "刀柄规格": "A100", "刀库数": "60T", "Z轴行程": "1000mm", "主轴转速": "12000rpm", "业务结关日期": "2024-06-01" }];
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "机台投产模板"); XLSX.writeFile(wb, "机台投产导入模板.xlsx");
   };
@@ -176,7 +174,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
           const bstr = evt.target?.result; const wb = XLSX.read(bstr, { type: 'binary' }); const wsName = wb.SheetNames[0]; const ws = wb.Sheets[wsName]; const data = XLSX.utils.sheet_to_json(ws);
           let successCount = 0; let failCount = 0;
           data.forEach((row: any) => {
-              const id = row['机台号'] || row['MachineID']; const modelName = row['机型名称'] || row['ModelName']; const workshopVal = row['生产车间'] || row['Workshop'] || 'K1(18栋)'; const startDateVal = row['计划上线日期'] || row['StartDate']; const holidayTypeVal = (row['假日别'] || row['HolidayType'] || 'DOUBLE') as HolidayType;
+              const id = row['机台号'] || row['MachineID']; const modelName = row['机型名称'] || row['ModelName']; const workshopVal = row['生产车间'] || row['Workshop'] || 'K1廠'; const startDateVal = row['计划上线日期'] || row['StartDate']; const holidayTypeVal = (row['假日别'] || row['HolidayType'] || 'DOUBLE') as HolidayType;
               const client = row['客户名称'] || row['ClientName'] || ''; const axis = row['二轴头'] || row['AxisHead'] || ''; const tool = row['刀柄规格'] || row['ToolHolder'] || ''; const magazine = row['刀库数'] || row['Magazine'] || ''; const zAxis = row['Z轴行程'] || row['ZAxis'] || ''; const spindle = row['主轴转速'] || row['SpindleSpeed'] || ''; const closingDateVal = row['业务结关日期'] || row['BusinessClosingDate'];
               if (!id || !modelName || !startDateVal) { failCount++; return; }
               const model = models.find(m => m.name.trim() === modelName.trim()); if (!model) { failCount++; return; }
@@ -250,7 +248,7 @@ export const OrderDatabase: React.FC<OrderDatabaseProps> = ({ orders, models, on
                         )}
                         <div><label className="block text-xs font-mono text-cyber-blue mb-2 uppercase tracking-wider flex items-center gap-2"><Disc size={14}/> 选择工艺模型 (机型) <span className="text-red-500">*</span></label><select value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)} className="w-full bg-cyber-bg border border-cyber-muted/40 p-3 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"><option value="">-- 请选择机型 --</option>{models.map(m => ( <option key={m.id} value={m.id}>{m.name}</option> ))}</select></div>
                         <div><label className="block text-xs font-mono text-cyber-blue mb-2 uppercase tracking-wider flex items-center gap-2"><Hash size={14}/> 机台号 (序列号) <span className="text-red-500">*</span></label><input type="text" value={machineId} onChange={(e) => setMachineId(e.target.value)} placeholder="例如: SN-2024-088" className="w-full bg-cyber-bg border border-cyber-muted/40 p-3 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm transition-shadow focus:shadow-neon-blue"/></div>
-                        <div><label className="block text-xs font-mono text-cyber-blue mb-2 uppercase tracking-wider flex items-center gap-2"><Factory size={14}/> 生产车间</label><select value={workshop} onChange={(e) => setWorkshop(e.target.value)} className="w-full bg-cyber-bg border border-cyber-muted/40 p-3 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"><option value="K1(18栋)">K1(18栋)</option><option value="K2(17栋)">K2(17栋)</option><option value="K3(戚墅堰)">K3(戚墅堰)</option></select></div>
+                        <div><label className="block text-xs font-mono text-cyber-blue mb-2 uppercase tracking-wider flex items-center gap-2"><Factory size={14}/> 生产车间</label><select value={workshop} onChange={(e) => setWorkshop(e.target.value)} className="w-full bg-cyber-bg border border-cyber-muted/40 p-3 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"><option value="K1廠">K1廠</option><option value="K2廠">K2廠</option><option value="K3廠">K3廠</option></select></div>
                         <div><label className="block text-xs font-mono text-cyber-blue mb-2 uppercase tracking-wider flex items-center gap-2"><User size={14}/> 客户名称</label><input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="例如: 江苏大前机床" className="w-full bg-cyber-bg border border-cyber-muted/40 p-3 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"/></div>
                     </div>
                     <div className="space-y-6">
