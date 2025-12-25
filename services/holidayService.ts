@@ -42,6 +42,7 @@ export const DEFAULT_HOLIDAY_RULES: Record<HolidayType, HolidayRule> = {
  * Check if a specific date is a working day based on the rule
  */
 export const isWorkingDay = (date: Date, rule: HolidayRule): boolean => {
+    if (!date || isNaN(date.getTime())) return true;
     const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
     const dateString = date.toISOString().split('T')[0];
 
@@ -83,16 +84,18 @@ export const isWorkingDay = (date: Date, rule: HolidayRule): boolean => {
  * Check if a date is within a HALTED anomaly period
  */
 const isHaltedDay = (date: Date, anomalies: AnomalyRecord[]): boolean => {
-    if (!anomalies || anomalies.length === 0) return false;
+    if (!date || isNaN(date.getTime()) || !anomalies || anomalies.length === 0) return false;
     const targetTime = date.getTime();
     
     return anomalies.some(a => {
         if (a.anomalyStatus !== 'HALTED') return false;
         const start = new Date(a.startTime);
+        if (isNaN(start.getTime())) return false;
         start.setHours(0,0,0,0);
         
         // If no end time, assume it's still halted up to "today"
         const end = a.endTime ? new Date(a.endTime) : new Date();
+        if (isNaN(end.getTime())) return false;
         end.setHours(23,59,59,999);
         
         return targetTime >= start.getTime() && targetTime <= end.getTime();
@@ -128,7 +131,11 @@ export function calculateOrderCompletionDate(
  * Projects a sequence of steps starting from startDateStr.
  */
 function projectStepList(startDateStr: string, steps: ProcessStep[], states: Record<string, any>, rule: HolidayRule, anomalies: AnomalyRecord[]): Date {
+    // 強化起始日期安全性
     let cursor = new Date(startDateStr);
+    if (isNaN(cursor.getTime())) {
+        cursor = new Date();
+    }
     cursor.setHours(0,0,0,0);
     
     // 取得當前時間與 21:00 順延邏輯
@@ -148,8 +155,9 @@ function projectStepList(startDateStr: string, steps: ProcessStep[], states: Rec
         const state = states[step.id] || { status: 'PENDING' };
         
         if (state.status === 'COMPLETED' || state.status === 'SKIPPED') {
-            const endTime = new Date(state.endTime || state.startTime || startDateStr);
-            const dateOnly = new Date(endTime); 
+            const endStr = state.endTime || state.startTime || startDateStr;
+            const endTime = new Date(endStr);
+            const dateOnly = isNaN(endTime.getTime()) ? new Date(cursor) : new Date(endTime);
             dateOnly.setHours(0,0,0,0);
             
             if (dateOnly > lastUsedDate) lastUsedDate = new Date(dateOnly);
@@ -195,8 +203,9 @@ export const calculateProjectedDate = (
     if (hoursNeeded <= 0) return new Date(startFromDate);
     
     const now = new Date();
-    let effectiveStart = new Date(startFromDate);
-    if (now.getHours() >= 21 && startFromDate.toDateString() === now.toDateString()) {
+    let startD = isNaN(startFromDate.getTime()) ? new Date() : startFromDate;
+    let effectiveStart = new Date(startD);
+    if (now.getHours() >= 21 && startD.toDateString() === now.toDateString()) {
         effectiveStart.setDate(effectiveStart.getDate() + 1);
     }
 

@@ -180,14 +180,14 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
   };
 
   return (
-    <div className="w-full space-y-6 animate-fade-in relative">
+    <div className="w-full space-y-6 animate-fade-in relative font-sans">
        
        {/* Edit Modal */}
        {showEditModal && editingAnomaly && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm font-sans">
                 <div className="bg-cyber-card border border-cyber-orange shadow-neon-orange max-w-lg w-full relative">
                     <div className="bg-cyber-orange/10 p-4 border-b border-cyber-orange/30 flex justify-between items-center">
-                        <h3 className="text-xl font-bold text-white tracking-wider flex items-center gap-2">
+                        <h3 className="text-xl font-bold text-white tracking-wider flex items-center gap-2 font-sans font-bold">
                             <Edit size={20} className="text-cyber-orange"/> 
                             编辑异常记录
                         </h3>
@@ -196,13 +196,13 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                         </button>
                     </div>
                     
-                    <div className="p-6 space-y-4">
+                    <div className="p-6 space-y-4 font-sans">
                         <div className="bg-cyber-bg/30 p-2 border border-cyber-muted/10 text-xs text-cyber-muted font-mono mb-4">
                             ID: {editingAnomaly.id} | 机台: {editingAnomaly.orderId}
                         </div>
 
                         <div>
-                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">工序名称</label>
+                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider font-sans font-bold">工序名称</label>
                             <input 
                                 type="text"
                                 value={editingAnomaly.stepName}
@@ -212,7 +212,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                         </div>
 
                         <div>
-                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">异常原因</label>
+                            <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider font-sans font-bold">异常原因</label>
                             <textarea 
                                 value={editingAnomaly.reason}
                                 onChange={(e) => handleEditChange('reason', e.target.value)}
@@ -223,7 +223,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">责任单位</label>
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider font-sans font-bold">责任单位</label>
                                 <select 
                                     value={editingAnomaly.department}
                                     onChange={(e) => handleEditChange('department', e.target.value)}
@@ -242,8 +242,8 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">異常狀態</label>
-                                <div className="flex bg-cyber-bg border border-cyber-muted/30 rounded p-1 gap-1">
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider font-sans font-bold">異常狀態</label>
+                                <div className="flex bg-cyber-bg border border-cyber-muted/30 rounded p-1 gap-1 font-sans">
                                     <button 
                                         onClick={() => handleEditChange('anomalyStatus', 'CONTINUOUS')}
                                         className={`flex-1 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-all ${editingAnomaly.anomalyStatus === 'CONTINUOUS' ? 'bg-cyber-blue text-black shadow-neon-blue' : 'text-cyber-muted hover:text-white'}`}
@@ -262,7 +262,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">开始时间</label>
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider font-sans font-bold">开始时间</label>
                                 <input 
                                     type="datetime-local"
                                     value={editingAnomaly.startTime}
@@ -271,7 +271,7 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider">结束时间</label>
+                                <label className="block text-xs text-cyber-blue mb-2 uppercase tracking-wider font-sans font-bold">结束时间</label>
                                 <input 
                                     type="datetime-local"
                                     value={editingAnomaly.endTime}
@@ -281,14 +281,14 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                             </div>
                         </div>
 
-                         <div className="bg-cyber-bg/50 p-3 border border-cyber-muted/20 flex justify-between items-center">
-                            <span className="text-xs text-cyber-muted uppercase">影响天数 (自动计算)</span>
+                         <div className="bg-cyber-bg/50 p-3 border border-cyber-muted/20 flex justify-between items-center font-sans">
+                            <span className="text-xs text-cyber-muted uppercase font-sans font-bold">影响天数 (自动计算)</span>
                             <span className="text-lg font-bold text-cyber-orange">{editingAnomaly.durationDays} 天</span>
                         </div>
 
                         <button 
                             onClick={handleSaveEdit}
-                            className="w-full bg-cyber-orange hover:bg-white text-black font-bold py-3 px-4 shadow-neon-orange transition-all flex items-center justify-center gap-2 mt-4"
+                            className="w-full bg-cyber-orange hover:bg-white text-black font-bold py-3 px-4 shadow-neon-orange transition-all flex items-center justify-center gap-2 mt-4 font-sans font-bold"
                         >
                             <Save size={18} /> 保存更改
                         </button>
@@ -298,32 +298,32 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
        )}
 
        {/* Header Section */}
-       <div className="flex items-center gap-4 border-b border-cyber-blue/30 pb-6">
+       <div className="flex items-center gap-4 border-b border-cyber-blue/30 pb-6 font-sans">
             <div className="p-4 bg-cyber-orange/10 rounded-full border border-cyber-orange/30 shadow-neon-orange">
                 <AlertOctagon size={32} className="text-cyber-orange" />
             </div>
             <div>
-                <h2 className="text-2xl font-display font-bold text-white">全厂异常监控中心</h2>
-                <p className="text-cyber-muted font-mono text-sm mt-1">
+                <h2 className="text-2xl font-display font-bold text-white font-sans">全厂异常监控中心</h2>
+                <p className="text-cyber-muted font-mono text-sm mt-1 font-sans">
                     汇整所有生产机台的异常回报纪录，追踪责任单位 with 处理时效。
                 </p>
             </div>
-            <div className="ml-auto flex gap-4">
+            <div className="ml-auto flex gap-4 font-sans">
                  <div className="bg-cyber-card border border-cyber-orange/30 px-4 py-2 rounded flex flex-col items-center">
-                     <span className="text-[10px] text-cyber-muted uppercase tracking-wider">当前筛选异常数</span>
-                     <span className="text-xl font-bold text-white font-mono">{filteredAnomalies.length} <span className="text-xs font-normal text-cyber-muted">件</span></span>
+                     <span className="text-[10px] text-cyber-muted uppercase tracking-wider font-sans font-bold">当前筛选异常数</span>
+                     <span className="text-xl font-bold text-white font-mono">{filteredAnomalies.length} <span className="text-xs font-normal text-cyber-muted font-sans">件</span></span>
                  </div>
                  <div className="bg-cyber-card border border-cyber-orange/30 px-4 py-2 rounded flex flex-col items-center">
-                     <span className="text-[10px] text-cyber-muted uppercase tracking-wider">累计影响天数</span>
-                     <span className="text-xl font-bold text-cyber-orange font-mono">{totalDuration.toFixed(1)} <span className="text-xs font-normal text-cyber-muted">天</span></span>
+                     <span className="text-[10px] text-cyber-muted uppercase tracking-wider font-sans font-bold">累计影响天数</span>
+                     <span className="text-xl font-bold text-cyber-orange font-mono">{totalDuration.toFixed(1)} <span className="text-xs font-normal text-cyber-muted font-sans">天</span></span>
                  </div>
             </div>
         </div>
 
         {/* Filter Bar */}
-        <div className="bg-cyber-card border border-cyber-muted/20 p-4 rounded-lg flex flex-wrap gap-4 items-end">
+        <div className="bg-cyber-card border border-cyber-muted/20 p-4 rounded-lg flex flex-wrap gap-4 items-end font-sans">
             <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2">
+                <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2 font-sans font-bold">
                     <Search size={12}/> 关键词搜索
                 </label>
                 <input 
@@ -331,20 +331,20 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="输入机台号、工序或原因..."
-                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"
+                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm font-sans"
                 />
             </div>
 
             <div className="w-[150px]">
-                 <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2">
-                    <Filter size={12}/> 生产车间
+                 <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2 font-sans font-bold">
+                    <Filter size={12}/> 生产廠區
                 </label>
                 <select 
                     value={selectedWorkshop}
                     onChange={(e) => setSelectedWorkshop(e.target.value)}
-                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"
+                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm font-sans font-bold"
                 >
-                    <option value="ALL">全部车间</option>
+                    <option value="ALL">全部廠區</option>
                     <option value="K1廠">K1廠</option>
                     <option value="K2廠">K2廠</option>
                     <option value="K3廠">K3廠</option>
@@ -352,13 +352,13 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
             </div>
 
             <div className="w-[150px]">
-                 <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2">
+                 <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2 font-sans font-bold">
                     <Filter size={12}/> 责任单位
                 </label>
                 <select 
                     value={selectedDepartment}
                     onChange={(e) => setSelectedDepartment(e.target.value)}
-                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm"
+                    className="w-full bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm font-sans font-bold"
                 >
                     <option value="ALL">全部单位</option>
                     {uniqueDepartments.map(dept => (
@@ -367,9 +367,9 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                 </select>
             </div>
 
-             <div className="flex gap-2 items-end">
+             <div className="flex gap-2 items-end font-sans">
                  <div>
-                    <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2">
+                    <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2 font-sans font-bold">
                         <Calendar size={12}/> 开始日期
                     </label>
                     <input 
@@ -379,9 +379,9 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                         className="bg-cyber-bg border border-cyber-muted/40 p-2 text-white focus:border-cyber-blue focus:outline-none font-mono text-sm w-[130px]"
                     />
                  </div>
-                 <div className="pb-2 text-cyber-muted">-</div>
+                 <div className="pb-2 text-cyber-muted font-sans">-</div>
                  <div>
-                    <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2">
+                    <label className="block text-xs font-mono text-cyber-blue mb-1 uppercase tracking-wider flex items-center gap-2 font-sans font-bold">
                         <Calendar size={12}/> 结束日期
                     </label>
                     <input 
@@ -395,15 +395,15 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
         </div>
 
         {/* Data Table */}
-        <div className="bg-cyber-card border border-cyber-blue/20 overflow-hidden rounded-lg shadow-lg">
-             <div className="overflow-x-auto">
+        <div className="bg-cyber-card border border-cyber-blue/20 overflow-hidden rounded-lg shadow-lg font-sans">
+             <div className="overflow-x-auto font-sans">
                 <table className="w-full text-left font-mono">
                     <thead>
-                        <tr className="border-b border-cyber-blue/30 bg-cyber-blue/5 text-cyber-blue text-xs uppercase tracking-wider">
+                        <tr className="border-b border-cyber-blue/30 bg-cyber-blue/5 text-cyber-blue text-xs uppercase tracking-wider font-sans font-bold">
                             <th className="p-4 w-[140px]">发生时间</th>
                             <th className="p-4 w-[120px]">机台号</th>
                             <th className="p-4 w-[130px]">状态</th>
-                            <th className="p-4 w-[120px]">车间</th>
+                            <th className="p-4 w-[120px]">廠區</th>
                             <th className="p-4 w-[150px]">工序名称</th>
                             <th className="p-4">异常原因描述</th>
                             <th className="p-4 w-[100px]">责任单位</th>
@@ -411,10 +411,10 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                             <th className="p-4 w-[100px] text-right">操作</th>
                         </tr>
                     </thead>
-                    <tbody className="text-sm divide-y divide-cyber-muted/10">
+                    <tbody className="text-sm divide-y divide-cyber-muted/10 font-sans">
                         {filteredAnomalies.length === 0 ? (
                             <tr>
-                                <td colSpan={9} className="p-8 text-center text-cyber-muted">
+                                <td colSpan={9} className="p-8 text-center text-cyber-muted font-sans font-bold">
                                     <div className="flex flex-col items-center justify-center opacity-50">
                                         <AlertTriangle size={48} className="mb-2"/>
                                         <span>暂无符合筛选条件的异常记录</span>
@@ -423,35 +423,35 @@ export const AnomalyList: React.FC<AnomalyListProps> = ({ orders, models, onUpda
                             </tr>
                         ) : (
                             filteredAnomalies.map((item, idx) => (
-                                <tr key={`${item.id}-${idx}`} className="hover:bg-white/5 transition-colors group">
-                                    <td className="p-4 text-cyber-muted text-xs">
+                                <tr key={`${item.id}-${idx}`} className="hover:bg-white/5 transition-colors group font-sans">
+                                    <td className="p-4 text-cyber-muted text-xs font-mono">
                                         <div>{item.reportedDate.toLocaleDateString()}</div>
                                         <div className="opacity-60">{item.reportedDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                                     </td>
-                                    <td className="p-4 font-bold text-white group-hover:text-cyber-blue transition-colors">
+                                    <td className="p-4 font-bold text-white group-hover:text-cyber-blue transition-colors font-mono">
                                         {item.orderId}
                                     </td>
                                     <td className="p-4">
-                                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap ${item.anomalyStatus === 'HALTED' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-cyber-blue/10 text-cyber-blue border border-cyber-blue/20'}`}>
+                                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap font-sans ${item.anomalyStatus === 'HALTED' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-cyber-blue/10 text-cyber-blue border border-cyber-blue/20'}`}>
                                             {item.anomalyStatus === 'HALTED' ? <PauseOctagon size={12} /> : <Zap size={12} />}
                                             {item.anomalyStatus === 'HALTED' ? '停工' : '持續生產'}
                                         </div>
                                     </td>
-                                    <td className="p-4 text-cyber-muted">
+                                    <td className="p-4 text-cyber-muted font-sans font-bold">
                                         {item.workshop}
                                     </td>
-                                    <td className="p-4 text-cyber-text/90">
+                                    <td className="p-4 text-cyber-text/90 font-sans font-bold">
                                         {item.stepName}
                                     </td>
-                                    <td className="p-4 text-white">
+                                    <td className="p-4 text-white font-sans">
                                         {item.reason}
                                     </td>
-                                    <td className="p-4">
-                                        <span className="px-2 py-1 bg-cyber-muted/10 border border-cyber-muted/30 rounded text-xs text-cyber-text">
+                                    <td className="p-4 font-sans font-bold">
+                                        <span className="px-2 py-1 bg-cyber-muted/10 border border-cyber-muted/30 rounded text-xs text-cyber-text font-sans font-bold">
                                             {item.department}
                                         </span>
                                     </td>
-                                    <td className="p-4 text-right">
+                                    <td className="p-4 text-right font-mono font-bold">
                                         <span className={`font-bold ${parseFloat(item.durationDays) >= 1 ? 'text-red-500' : 'text-cyber-orange'}`}>
                                             {item.durationDays}
                                         </span>

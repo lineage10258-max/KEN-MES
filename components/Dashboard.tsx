@@ -169,7 +169,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ orders, models }) => {
         <div className="lg:col-span-2 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 border-b border-cyber-blue/30 pb-2 gap-4">
                 <div className="flex items-center gap-6">
-                    <h2 className="text-lg font-display font-bold text-cyber-blue tracking-wider">实时生产动态</h2>
+                    <h2 className="text-lg font-display font-bold text-cyber-blue tracking-wider">实时生产廠區动态</h2>
                     <div className="flex bg-cyber-bg/30 rounded p-1 border border-cyber-blue/20">
                         {['ALL', 'K1廠', 'K2廠', 'K3廠'].map((tab) => (
                             <button
@@ -450,19 +450,19 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, models, compact = false, f
                         <div className={`text-[10px] font-bold leading-none truncate max-w-[150px] ${anomalySummary ? 'text-red-500 animate-pulse' : 'text-cyber-muted'}`}>{anomalySummary ? anomalySummary.displayStr : '0'}</div>
                     </div>
                     <div className={`flex flex-col items-center justify-center w-16 h-10 rounded border shadow-sm ${variance > 0 ? 'border-cyber-orange/40 bg-cyber-orange/10' : 'border-green-500/40 bg-green-500/10'}`}>
-                        <span className="text-[10px] text-white font-bold block drop-shadow-md leading-none mb-0.5">差異天數</span>
+                        <span className="text-[10px] text-white font-bold block drop-shadow-md font-sans font-bold leading-none mb-0.5">差異天數</span>
                         <div className={`flex items-center gap-0.5 text-sm font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-green-400'}`}>{variance > 0 && <AlertTriangle size={10}/>}{variance > 0 ? `+${variance}` : variance}</div>
                     </div>
                     <div className="flex flex-col items-center justify-center w-16 h-10 rounded border border-cyber-blue/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">生產完工</span>
+                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md font-sans font-bold leading-none mb-0.5">生產完工</span>
                         <span className="text-sm font-bold text-cyber-blue leading-none">{formatMMDD(projectedDate)}</span>
                     </div>
                     <div className={`flex flex-col items-center justify-center w-16 h-10 rounded border shadow-[0_0_5px_rgba(0,240,255,0.05)] ${variance > 0 ? 'border-cyber-orange/30 bg-cyber-orange/5' : 'border-cyber-blue/30 bg-cyber-bg/40'}`}>
-                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">业务结关</span>
+                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md font-sans font-bold leading-none mb-0.5">业务结关</span>
                         <span className={`text-sm font-bold leading-none ${variance > 0 ? 'text-cyber-orange' : 'text-white'}`}>{closingDate ? formatMMDD(closingDate) : '-'}</span>
                     </div>
                     <div className="flex flex-col items-center justify-center w-16 h-10 rounded border border-cyber-muted/30 bg-cyber-bg/40 shadow-[0_0_5px_rgba(0,240,255,0.05)]">
-                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md leading-none mb-0.5">計畫上線</span>
+                        <span className="text-[10px] text-cyan-200/70 font-bold block drop-shadow-md font-sans font-bold leading-none mb-0.5">計畫上線</span>
                         <span className="text-sm font-bold text-white drop-shadow-md leading-none">{formatMMDD(order.startDate)}</span>
                     </div>
                 </div>
